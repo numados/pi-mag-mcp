@@ -1,0 +1,20 @@
+{
+  "$comment": "Reference only — this server reads environment variables, it does not load this file. Copy the wanted entries into ~/.pi/agent/mcp.json under mcpServers.web-search.env. Do not add TAVILY_API_KEY as a ${VAR} placeholder in mcp.json: Pi throws on unset substitution before the server starts.",
+  "env": {
+    "WEB_SEARCH_DEADLINE_MS": "30000",
+    "WEB_SEARCH_ALLOW_QUOTA": "0"
+  },
+  "optional": {
+    "TAVILY_API_KEY": {
+      "format": "tvly-...",
+      "effect": "Enables the Tavily account path. Alone it spends nothing: account credits require WEB_SEARCH_ALLOW_QUOTA=1 as well."
+    },
+    "WEB_SEARCH_ALLOW_QUOTA": {
+      "values": ["0", "1"],
+      "effect": "1 permits account-credit deep search. Default 0 keeps deep mode on the free keyless tier."
+    },
+    "WEB_SEARCH_DEADLINE_MS": {
+      "effect": "Whole-search budget in milliseconds, clamped to 1000..120000. Default 30000."
+    }
+  }
+}
