@@ -2,10 +2,9 @@
 
 A Pi-specific MCP server exposing one tool, `web_search`, over stdio.
 
-Reality check up front: web search is a best-effort capability. DuckDuckGo has
-no SLA and blocks scrapers; Tavily's free tier has daily caps. This server is
-built to report what actually happened instead of pretending a failure was an
-empty result, but it cannot promise that a search will succeed.
+Web search is best-effort here. DuckDuckGo has no SLA and blocks scrapers;
+Tavily's free tier has daily caps. The server distinguishes a search that failed
+from one that matched nothing, but it cannot promise that a search will succeed.
 
 ## What it does
 
@@ -53,8 +52,8 @@ Status rules:
 - `empty` means **every attempted provider answered** and matched nothing.
 - `unavailable` means no usable answer was produced. It is not evidence that
   the information does not exist, and the notes say so.
-- `isError` is set only for `unavailable` and `cancelled`. An honest "no
-  matches" is a successful search.
+- `isError` is set only for `unavailable` and `cancelled`. A zero-result answer
+  is a successful search, not an error.
 
 Failure causes are structured, not prose: `rate-limited`, `auth`, `blocked`,
 `timeout`, `malformed`, `network`, `busy`, `cancelled`, `unknown`. Guidance is
@@ -79,16 +78,18 @@ merely abandoning the wait.
 
 ## Install
 
+From the repository root:
+
 ```bash
-cd web-search-mcp
-npm ci
-npm run build
-npm test
+./install.sh list                 # readiness report; changes nothing
+./install.sh web-search --dry-run # show the plan; changes nothing
+./install.sh web-search           # npm ci, build, test, register
 ```
 
-Register it with Pi (paths are absolute; `${VAR}` in `mcp.json` throws if the
-variable is unset, so optional secrets are added as literal `env` entries only
-when the feature is actually used):
+The script registers this path and leaves the rest of the entry alone, so a
+`timeout`, `toolExposure` or extra `env` key already in `mcp.json` survives.
+
+To register by hand instead, write the entry into `mcp.json` yourself:
 
 ```jsonc
 // ~/.pi/agent/mcp.json → mcpServers
@@ -97,22 +98,30 @@ when the feature is actually used):
     "command": "/opt/homebrew/bin/node",
     "args": ["/absolute/path/to/pi-mag-mcp/web-search-mcp/dist/server.js"],
     "description": "web_search: DuckDuckGo free, Tavily deep mode on explicit quota opt-in",
-    "enabled": true
+    "exposure": "direct"
   }
 }
 ```
+
+`direct` is the practical choice for a single tool: with `codemode` (Pi's
+default) the model must first find the tool before it can call it.
+
+Do not write an optional secret as a `${VAR}` placeholder unless the variable
+is always set. Pi substitutes at startup and fails before the server runs, so an
+absent `TAVILY_API_KEY` makes the whole server unavailable. Either omit `env`
+(it inherits Pi's environment), pass the value with `--env`, or use a
+`!command` value that Pi executes.
 
 Optional environment for `deep` mode:
 
 | Variable | Effect |
 | --- | --- |
-| `TAVILY_API_KEY` | enables the account path; alone it spends nothing |
+| `TAVILY_API_KEY` | enables the account path |
 | `WEB_SEARCH_ALLOW_QUOTA=1` | permits account-credit search |
 | `WEB_SEARCH_DEADLINE_MS` | whole-search budget |
 
 Without `env`, the process inherits Pi's environment, so an exported
-`TAVILY_API_KEY` is visible to the server — and still cannot be spent without
-`WEB_SEARCH_ALLOW_QUOTA=1`.
+`TAVILY_API_KEY` is visible to the server.
 
 ## Trust boundary
 
