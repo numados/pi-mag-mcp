@@ -1,0 +1,26 @@
+{
+  "name": "web-search-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Web search MCP server for Pi: web_search tool, DuckDuckGo free path by default, Tavily deep mode behind explicit quota approval; structured results with provenance and honest failure statuses",
+  "main": "dist/server.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "npm run build && node --test --test-concurrency=4 tests/*.test.mjs",
+    "smoke": "node tests/smoke.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "duck-duck-scrape": "2.2.7",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}
