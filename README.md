@@ -5,15 +5,16 @@ and registered in `~/.pi/agent/mcp.json`.
 
 ## Status
 
-In progress. `web-search-mcp/` and `office-mcp/` are implemented and tested; six
-of the eight servers are not ported yet. Design, source inventory and per-server
-research live in the local planning workspace `.numados/tasks/` (not tracked by
-git — see `.git/info/exclude`).
+In progress. Three of the eight servers are implemented and tested:
+`web-search-mcp/`, `office-mcp/` and `teams-mcp/`. Design, source inventory and
+per-server research live in the local planning workspace `.numados/tasks/` (not
+tracked by git — see `.git/info/exclude`).
 
-| Server | State |
-| --- | --- |
-| `web-search-mcp` | implemented and tested; live registration still points at the old catalog |
-| `office-mcp` | implemented and tested; live registration still points at the old catalog |
+| Server | Tools | State |
+| --- | --- | --- |
+| `web-search-mcp` | `web_search` | implemented and tested; live registration still points at the old catalog |
+| `office-mcp` | `create_pdf`, `pdf_clean` | implemented and tested; live registration still points at the old catalog |
+| `teams-mcp` | `teams_message` | implemented and tested; not registered on this machine |
 
 ## Installing a server
 
@@ -24,7 +25,8 @@ entry into Pi's configuration:
 ./install.sh list                     # readiness report; changes nothing
 ./install.sh web-search --dry-run     # show the plan; changes nothing
 ./install.sh web-search               # build, test, register
-./install.sh office                   # build, test, register the office server
+./install.sh office                   # build, test, register the PDF server
+./install.sh teams                    # build, test, register the Teams server
 ```
 
 A server name is required. Without one the script prints usage and exits 2, so

@@ -5,8 +5,8 @@
  * result, so "works with Pi" is verified by the real client rather than by
  * reading documentation.
  *
- * The child gets an allowlisted environment and a temporary HOME, so no real
- * Confluence/Teams credential on this machine is ever read or sent.
+ * The child gets an allowlisted environment and a temporary HOME; this server
+ * reads no remote service, so no credential on the machine is involved.
  */
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -18,14 +18,7 @@ import { test } from "node:test";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const serverEntry = path.resolve(here, "..", "dist", "server.js");
 
-const TOOL_NAMES = [
-  "confluence_page",
-  "confluence_comments",
-  "confluence_search",
-  "teams_message",
-  "create_pdf",
-  "pdf_clean",
-];
+const TOOL_NAMES = ["create_pdf", "pdf_clean"];
 
 function findPiMcpRoot() {
   const explicit = process.env.PI_MCP_ROOT;
@@ -91,7 +84,7 @@ test("Pi client negotiates and reaches the office server", async (t) => {
   });
 });
 
-test("tools/list advertises the six baseline names with output schemas", async (t) => {
+test("tools/list advertises the two PDF tools with output schemas", async (t) => {
   await withServer(t, async ({ client }) => {
     const tools = await client.listTools();
     assert.deepEqual(tools.map((tool) => tool.name), TOOL_NAMES);
@@ -100,10 +93,10 @@ test("tools/list advertises the six baseline names with output schemas", async (
       assert.ok(tool.inputSchema && typeof tool.inputSchema === "object", `${tool.name} advertises an input schema`);
     }
 
-    const page = tools.find((tool) => tool.name === "confluence_page");
-    assert.equal(page.annotations?.readOnlyHint, true);
+    const create = tools.find((tool) => tool.name === "create_pdf");
+    assert.equal(create.annotations?.readOnlyHint, false);
+    assert.equal(create.annotations?.openWorldHint, false, "no remote service is involved");
     const clean = tools.find((tool) => tool.name === "pdf_clean");
-    assert.equal(clean.annotations?.readOnlyHint, false);
     assert.equal(clean.annotations?.destructiveHint, true);
     assert.ok(clean.description.includes("overwrite=true"), "the overwrite rule is in the description, not only in a manual");
   });
@@ -112,19 +105,13 @@ test("tools/list advertises the six baseline names with output schemas", async (
 test("invalid arguments are rejected before any side effect", async (t) => {
   await withServer(t, async ({ client }) => {
     const cases = [
-      ["confluence_page", {}, "missing url"],
-      ["confluence_page", { url: "  " }, "whitespace url"],
-      ["confluence_page", { url: "1", pageId: "2" }, "unknown argument"],
-      ["confluence_search", { cql: "" }, "empty cql"],
-      ["confluence_search", { cql: "text~a", limit: 0 }, "zero limit"],
-      ["confluence_search", { cql: "text~a", limit: 1.5 }, "fractional limit"],
-      ["confluence_search", { cql: "text~a", limit: 51 }, "limit over the maximum"],
-      ["teams_message", {}, "missing url"],
       ["create_pdf", { images: ["/tmp/a.png"] }, "missing output"],
       ["create_pdf", { images: [], output: "/tmp/a.pdf" }, "empty image list"],
       ["create_pdf", { images: ["/tmp/a.png"], output: "/tmp/a.pdf", quality: 0 }, "quality out of range"],
+      ["create_pdf", { images: ["/tmp/a.png"], output: "/tmp/a.pdf", dpi: 300 }, "argument owned by the other tool"],
       ["pdf_clean", { input: "/tmp/a.pdf", operation: "shred" }, "unknown operation"],
       ["pdf_clean", { input: "/tmp/a.pdf", operation: "bw", dpi: 10 }, "dpi out of range"],
+      ["pdf_clean", { operation: "bw" }, "missing input"],
     ];
     for (const [tool, args, why] of cases) {
       let failed = false;
@@ -151,23 +138,13 @@ test("an unknown tool is a protocol-level failure", async (t) => {
   });
 });
 
-test("missing credentials are a structured failure, not a crash", async (t) => {
+test("a missing input PDF is a structured failure, not a crash", async (t) => {
   await withServer(t, async ({ client }) => {
-    const result = await client.callTool("confluence_page", {
-      url: "https://x.atlassian.net/wiki/spaces/A/pages/123456/Title",
-    });
+    const result = await client.callTool("pdf_clean", { input: "/nonexistent/office-mcp-smoke.pdf", operation: "info" });
     assert.equal(result.isError, true);
     assert.equal(result.structuredContent?.status, "unavailable");
-    assert.equal(result.structuredContent?.reason, "auth");
-    assert.ok(Array.isArray(result.structuredContent?.notes) && result.structuredContent.notes.length > 0);
-  });
-});
-
-test("a malformed Teams URL fails before any token is read", async (t) => {
-  await withServer(t, async ({ client }) => {
-    const result = await client.callTool("teams_message", { url: "https://teams.microsoft.com/l/message/only-one?groupId=g" });
-    assert.equal(result.isError, true);
-    assert.equal(result.structuredContent?.reason, "unsupported");
+    assert.equal(result.structuredContent?.reason, "not-found");
+    assert.ok(result.structuredContent?.notes.length > 0);
   });
 });
 

@@ -4,7 +4,7 @@
  * Rules this module owns, so no caller restates them:
  * - no shell: every argument is passed literally, so a filename containing
  *   spaces, quotes or `; rm -rf` cannot become a command;
- * - the child sees an allowlisted environment, never Confluence/Teams secrets;
+ * - the child sees an allowlisted environment, never the server's own secrets;
  * - output is byte-capped and the whole process group is terminated on timeout
  *   or cancellation, so OCR/ImageMagick descendants cannot outlive the call.
  */

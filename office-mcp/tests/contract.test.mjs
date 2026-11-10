@@ -8,51 +8,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   LIMITS,
-  confluencePageInputSchema,
-  confluenceSearchInputSchema,
   createPdfInputSchema,
   pdfCleanInputSchema,
-  teamsMessageInputSchema,
-  confluenceSearchOutputSchema,
+  createPdfOutputSchema,
   pdfCleanOutputSchema,
   isFailureStatus,
 } from "../dist/contract.js";
 
-const parsePage = (value) => confluencePageInputSchema.safeParse(value);
-const parseSearch = (value) => confluenceSearchInputSchema.safeParse(value);
 const parsePdf = (value) => createPdfInputSchema.safeParse(value);
 const parseClean = (value) => pdfCleanInputSchema.safeParse(value);
-
-test("a locator is required, trimmed and length-bounded", () => {
-  assert.equal(parsePage({}).success, false);
-  assert.equal(parsePage({ url: "" }).success, false);
-  assert.equal(parsePage({ url: "   " }).success, false);
-  assert.equal(parsePage({ url: 17 }).success, false);
-  assert.equal(parsePage({ url: " 123456 " }).data.url, "123456");
-  assert.equal(parsePage({ url: "x".repeat(LIMITS.locatorMaxChars + 1) }).success, false);
-});
-
-test("unknown arguments are rejected instead of silently dropped", () => {
-  assert.equal(parsePage({ url: "1", pageId: "2" }).success, false);
-  assert.equal(parseSearch({ cql: "text~a", limit: 5, offset: 10 }).success, false);
-});
-
-test("cql is non-empty and limit is a bounded integer with a default", () => {
-  assert.equal(parseSearch({}).success, false);
-  assert.equal(parseSearch({ cql: "   " }).success, false);
-  assert.equal(parseSearch({ cql: "x".repeat(LIMITS.cqlMaxChars + 1) }).success, false);
-  assert.equal(parseSearch({ cql: "text~a" }).data.limit, 10);
-  for (const bad of [0, -1, 1.5, LIMITS.searchMaxResults + 1, "5", null]) {
-    assert.equal(parseSearch({ cql: "text~a", limit: bad }).success, false, `limit=${bad} must be rejected`);
-  }
-  assert.equal(parseSearch({ cql: "text~a", limit: LIMITS.searchMaxResults }).success, true);
-});
-
-test("teams_message requires a non-empty url", () => {
-  assert.equal(teamsMessageInputSchema.safeParse({}).success, false);
-  assert.equal(teamsMessageInputSchema.safeParse({ url: "  " }).success, false);
-  assert.equal(teamsMessageInputSchema.safeParse({ url: "https://x" }).success, true);
-});
 
 test("create_pdf defaults are real values and ranges are enforced", () => {
   const parsed = parsePdf({ images: ["/tmp/a.png"], output: "/tmp/a.pdf" });
@@ -62,6 +26,7 @@ test("create_pdf defaults are real values and ranges are enforced", () => {
     { sortBy: "name", quality: 82, maxDimension: 2480, grayscale: false, overwrite: false },
   );
   assert.equal(parsePdf({ images: [], output: "/tmp/a.pdf" }).success, false);
+  assert.equal(parsePdf({ images: ["/tmp/a.png"] }).success, false, "output is required");
   assert.equal(parsePdf({ images: ["/tmp/a.png"], output: "/tmp/a.pdf", quality: 0 }).success, false);
   assert.equal(parsePdf({ images: ["/tmp/a.png"], output: "/tmp/a.pdf", quality: 101 }).success, false);
   assert.equal(parsePdf({ images: ["/tmp/a.png"], output: "/tmp/a.pdf", quality: 82.5 }).success, false);
@@ -71,6 +36,11 @@ test("create_pdf defaults are real values and ranges are enforced", () => {
     parsePdf({ images: Array.from({ length: LIMITS.imagesMax + 1 }, (_, i) => `/tmp/${i}.png`), output: "/tmp/a.pdf" }).success,
     false,
   );
+});
+
+test("unknown arguments are rejected instead of silently dropped", () => {
+  assert.equal(parsePdf({ images: ["/tmp/a.png"], output: "/tmp/a.pdf", dpi: 300 }).success, false);
+  assert.equal(parseClean({ input: "/tmp/a.pdf", operation: "bw", quality: 80 }).success, false);
 });
 
 test("pdf_clean keeps the operation enum and validates numeric ranges", () => {
@@ -87,18 +57,23 @@ test("pdf_clean keeps the operation enum and validates numeric ranges", () => {
 });
 
 test("output schemas accept documented shapes and reject unknown causes", () => {
-  const search = {
+  const created = {
     status: "ok",
-    cql: "text~a",
-    count: 0,
-    results: [],
-    truncated: false,
-    droppedUnsafeUrls: 0,
+    output: "/tmp/a.pdf",
+    pages: 2,
+    inputBytes: 10,
+    outputBytes: 5,
+    files: ["/tmp/a.png"],
+    skipped: [],
+    quality: 82,
+    maxDimension: 2480,
+    grayscale: false,
     reason: null,
     notes: [],
   };
-  assert.equal(confluenceSearchOutputSchema.safeParse(search).success, true);
-  assert.equal(confluenceSearchOutputSchema.safeParse({ ...search, reason: "made-up" }).success, false);
+  assert.equal(createPdfOutputSchema.safeParse(created).success, true);
+  assert.equal(createPdfOutputSchema.safeParse({ ...created, status: "fine" }).success, false);
+  assert.equal(createPdfOutputSchema.safeParse({ ...created, reason: "made-up" }).success, false);
 
   const clean = {
     status: "ok",
@@ -116,7 +91,7 @@ test("output schemas accept documented shapes and reject unknown causes", () => 
     notes: [],
   };
   assert.equal(pdfCleanOutputSchema.safeParse(clean).success, true);
-  assert.equal(pdfCleanOutputSchema.safeParse({ ...clean, status: "fine" }).success, false);
+  assert.equal(pdfCleanOutputSchema.safeParse({ ...clean, reason: "auth" }).success, false, "a remote-only cause cannot leak into this server");
 });
 
 test("only unavailable and cancelled are execution failures", () => {

@@ -33,7 +33,8 @@ TARGET=""
 # into a new entry; a timeout already present in mcp.json is never overridden.
 REGISTRY=(
   "web-search|web-search-mcp|web_search: DuckDuckGo free by default, Tavily deep mode only on explicit quota opt-in; structured results with provenance and explicit failure status|"
-  "office|office-mcp|office: Confluence pages+comments+CQL search, one Teams message read, PDF from images, PDF cleanup; explicit failure causes and no silent overwrite|600"
+  "office|office-mcp|office: create_pdf from images and pdf_clean (grayscale/bw/clean-scan/ocr/optimize/info); local files only, explicit failure causes and no silent overwrite|600"
+  "teams|teams-mcp|teams_message: one Teams channel message by share URL, browser token or Azure CLI fallback, structured failure causes|120"
 )
 
 server_field() { # server_field <name> <1|2|3|4>

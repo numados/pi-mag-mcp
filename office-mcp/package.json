@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Office/content MCP server for Pi: Confluence pages, comments and CQL search, one Teams message read, PDF from images, and PDF cleanup; structured results with explicit failure causes and no silent overwrite",
+  "description": "PDF MCP server for Pi: create_pdf from images via ImageMagick and pdf_clean (grayscale/bw/clean-scan/ocr/optimize/info/auto); structured failure causes and no silent overwrite",
   "main": "dist/server.js",
   "engines": {
     "node": ">=22"
