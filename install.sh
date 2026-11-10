@@ -27,21 +27,24 @@ ENV_PAIRS=()
 TARGET=""
 
 # --------------------------------------------------------------- server registry
-# One line per server: name|directory|description. The description drives Pi's
-# tool search and the system-prompt summary, so it states what the server
-# offers rather than repeating its name.
+# One line per server: name|directory|description|timeout. The description drives
+# Pi's tool search and the system-prompt summary, so it states what the server
+# offers rather than repeating its name. The timeout is a default seeded only
+# into a new entry; a timeout already present in mcp.json is never overridden.
 REGISTRY=(
-  "web-search|web-search-mcp|web_search: DuckDuckGo free by default, Tavily deep mode only on explicit quota opt-in; structured results with provenance and explicit failure status"
+  "web-search|web-search-mcp|web_search: DuckDuckGo free by default, Tavily deep mode only on explicit quota opt-in; structured results with provenance and explicit failure status|"
+  "office|office-mcp|office: Confluence pages+comments+CQL search, one Teams message read, PDF from images, PDF cleanup; explicit failure causes and no silent overwrite|600"
 )
 
-server_field() { # server_field <name> <1|2|3>
+server_field() { # server_field <name> <1|2|3|4>
   local entry
   for entry in "${REGISTRY[@]}"; do
-    IFS='|' read -r name _dir _desc <<<"$entry"
+    IFS='|' read -r name _dir _desc _timeout <<<"$entry"
     if [ "$name" = "$1" ]; then
       case "$2" in
         2) printf '%s' "$_dir" ;;
         3) printf '%s' "$_desc" ;;
+        4) printf '%s' "$_timeout" ;;
       esac
       return 0
     fi
@@ -205,9 +208,10 @@ build_env_json() {
 
 cmd_install() {
   require_known_server
-  local dir desc package entry_path node_bin
+  local dir desc timeout package entry_path node_bin
   dir="$(server_field "$TARGET" 2)"
   desc="$(server_field "$TARGET" 3)"
+  timeout="$(server_field "$TARGET" 4)"
   package="$ROOT/$dir/package.json"
   entry_path="$ROOT/$dir/dist/server.js"
   node_bin="$(command -v node || true)"
@@ -221,7 +225,8 @@ cmd_install() {
   note "entry:  $entry_path"
   note "pi:     $MCP_JSON"
   note "exposure: $EXPOSURE"
-  [ "${#ENV_PAIRS[@]}" -gt 0 ] && note "env:    ${ENV_PAIRS[*]}"
+  [ "${#ENV_PAIRS[@]}" -gt 0 ] && note "env:    $(printf '%s\n' "${ENV_PAIRS[@]}" | cut -d= -f1 | paste -sd ',' -) (values not shown)"
+  [ -n "$timeout" ] && note "timeout: ${timeout}s (seed for a new entry only)"
 
   local previous_path=""
   previous_path="$(registered_path "$TARGET" || true)"
@@ -251,16 +256,16 @@ cmd_install() {
 
   step "test"
   # Registration is gated on the tests: a successful compile does not prove the
-  # server speaks MCP or that search still behaves.
+  # server speaks MCP and still behaves as documented.
   ( cd "$ROOT/$dir" && npm test )
 
   [ "$REGISTER" = true ] || { step "done"; note "registration skipped (--no-pi)"; return 0; }
 
-  register "$TARGET" "$desc" "$node_bin" "$entry_path"
+  register "$TARGET" "$desc" "$node_bin" "$entry_path" "$timeout"
 }
 
-register() { # register <name> <description> <node-bin> <entry-path>
-  local name="$1" desc="$2" node_bin="$3" entry_path="$4"
+register() { # register <name> <description> <node-bin> <entry-path> <timeout>
+  local name="$1" desc="$2" node_bin="$3" entry_path="$4" timeout="$5"
   step "Pi registration ($MCP_JSON)"
 
   local dir; dir="$(dirname "$MCP_JSON")"
@@ -285,7 +290,8 @@ register() { # register <name> <description> <node-bin> <entry-path>
 
   tmp="$(mktemp "$dir/.mcp.json.tmp.XXXXXX")"
   if ! jq --arg n "$name" --arg cmd "$node_bin" --arg path "$entry_path" \
-          --arg desc "$desc" --arg exposure "$EXPOSURE" --argjson env "$env_json" '
+          --arg desc "$desc" --arg exposure "$EXPOSURE" --arg timeout "$timeout" \
+          --argjson env "$env_json" '
         .mcpServers //= {} |
         .mcpServers[$n] = (
           ((.mcpServers[$n] // {}) + {
@@ -294,6 +300,7 @@ register() { # register <name> <description> <node-bin> <entry-path>
             description: $desc,
             exposure: $exposure
           })
+          | if ($timeout != "" and (.timeout == null)) then .timeout = ($timeout | tonumber) else . end
           | if $env == null then . else .env = ((.env // {}) + $env) end
         )
       ' "$MCP_JSON" >"$tmp"; then
