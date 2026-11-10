@@ -1,0 +1,25 @@
+{
+  "name": "search-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local search router MCP server for Pi: one stable tool contract per intent (text/files/structure/docs/semantic/machine/crossrepo) over swappable providers (rg, fd, mdfind, ast-grep, rga, auggie, serena, zoekt) with availability probing, ordered fallback chains and a doctor report",
+  "main": "dist/server.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "doctor": "node dist/server.js --doctor",
+    "test": "npm run build && node --test --test-concurrency=4 tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}

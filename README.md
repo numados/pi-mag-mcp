@@ -1,20 +1,21 @@
 # pi-mag-mcp
 
-Pi-specific MCP servers: eight stdio servers written for the Pi coding agent
+Pi-specific MCP servers: nine stdio servers written for the Pi coding agent
 and registered in `~/.pi/agent/mcp.json`.
 
 ## Status
 
-In progress. Three of the eight servers are implemented and tested:
-`web-search-mcp/`, `office-mcp/` and `teams-mcp/`. Design, source inventory and
-per-server research live in the local planning workspace `.numados/tasks/` (not
-tracked by git — see `.git/info/exclude`).
+In progress. Four of the nine servers are implemented and tested:
+`web-search-mcp/`, `office-mcp/`, `teams-mcp/` and `search-mcp/`. Design, source
+inventory and per-server research live in the local planning workspace
+`.numados/tasks/` (not tracked by git — see `.git/info/exclude`).
 
 | Server | Tools | State |
 | --- | --- | --- |
 | `web-search-mcp` | `web_search` | implemented and tested; live registration still points at the old catalog |
 | `office-mcp` | `create_pdf`, `pdf_clean` | implemented and tested; live registration still points at the old catalog |
 | `teams-mcp` | `teams_message` | implemented and tested; not registered on this machine |
+| `search-mcp` | `providers`, `search`, `search_{text,files,structure,docs,semantic,machine,crossrepo}` | implemented and tested; live registration still points at the old catalog |
 
 ## Installing a server
 
@@ -27,6 +28,7 @@ entry into Pi's configuration:
 ./install.sh web-search               # build, test, register
 ./install.sh office                   # build, test, register the PDF server
 ./install.sh teams                    # build, test, register the Teams server
+./install.sh search                   # build, test, register the search router
 ```
 
 A server name is required. Without one the script prints usage and exits 2, so

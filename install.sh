@@ -27,25 +27,30 @@ ENV_PAIRS=()
 TARGET=""
 
 # --------------------------------------------------------------- server registry
-# One line per server: name|directory|description|timeout. The description drives
-# Pi's tool search and the system-prompt summary, so it states what the server
-# offers rather than repeating its name. The timeout is a default seeded only
-# into a new entry; a timeout already present in mcp.json is never overridden.
+# One line per server: name|directory|description|timeout|toolExpose. The
+# description drives Pi's tool search and the system-prompt summary, so it states
+# what the server offers rather than repeating its name. The timeout is a default
+# seeded only into a new entry; a timeout already present in mcp.json is never
+# overridden. The optional fifth field lists per-tool exposure as
+# `tool:mode,tool:mode` and is merged into the entry's `toolExposure`, so the
+# tools a server means to expose directly survive a fresh install.
 REGISTRY=(
-  "web-search|web-search-mcp|web_search: DuckDuckGo free by default, Tavily deep mode only on explicit quota opt-in; structured results with provenance and explicit failure status|"
-  "office|office-mcp|office: create_pdf from images and pdf_clean (grayscale/bw/clean-scan/ocr/optimize/info); local files only, explicit failure causes and no silent overwrite|600"
-  "teams|teams-mcp|teams_message: one Teams channel message by share URL, browser token or Azure CLI fallback, structured failure causes|120"
+  "web-search|web-search-mcp|web_search: DuckDuckGo free by default, Tavily deep mode only on explicit quota opt-in; structured results with provenance and explicit failure status||"
+  "office|office-mcp|office: create_pdf from images and pdf_clean (grayscale/bw/clean-scan/ocr/optimize/info); local files only, explicit failure causes and no silent overwrite|600|"
+  "teams|teams-mcp|teams_message: one Teams channel message by share URL, browser token or Azure CLI fallback, structured failure causes|120|"
+  "search|search-mcp|search: local search router — text, files, structure, docs, semantic, machine and crossrepo over swappable providers (rg, fd, mdfind, ast-grep, rga, auggie, serena, zoekt) with ordered fallback, availability probing and a doctor report; hits are untrusted file content||search:direct,providers:direct"
 )
 
-server_field() { # server_field <name> <1|2|3|4>
+server_field() { # server_field <name> <1|2|3|4|5>
   local entry
   for entry in "${REGISTRY[@]}"; do
-    IFS='|' read -r name _dir _desc _timeout <<<"$entry"
+    IFS='|' read -r name _dir _desc _timeout _tool_expose <<<"$entry"
     if [ "$name" = "$1" ]; then
       case "$2" in
         2) printf '%s' "$_dir" ;;
         3) printf '%s' "$_desc" ;;
         4) printf '%s' "$_timeout" ;;
+        5) printf '%s' "$_tool_expose" ;;
       esac
       return 0
     fi
@@ -194,6 +199,24 @@ cmd_list() {
   printf '%s\n' "${rows[@]}" | while IFS=$'\t' read -r name deps built registered exposure note; do
     printf '%-14s %-8s %-8s %-12s %-10s %s\n' "$name" "$deps" "$built" "$registered" "$exposure" "$note"
   done
+
+  # Machine requirements: the server owns the table (requirements.json) and the
+  # verdict rules, so `list` asks its own doctor instead of restating them in
+  # bash. A server that is not built yet has nothing to ask.
+  local req_name req_dir report
+  for req_name in $(server_names); do
+    req_dir="$(server_field "$req_name" 2)"
+    [ -f "$ROOT/$req_dir/requirements.json" ] || continue
+    printf '\nrequirements (%s):\n' "$req_name"
+    if [ -f "$ROOT/$req_dir/dist/server.js" ]; then
+      # A non-zero exit means a required binary is missing; the report is still valid.
+      report="$(cd "$ROOT/$req_dir" && node dist/server.js --doctor 2>/dev/null)" || true
+      printf '%s\n' "$report" | sed 's/^/  /'
+    else
+      printf '  not built yet — build it to see the machine report\n'
+    fi
+  done
+
   printf '\nregistration file: %s\n' "$MCP_JSON"
   return "$status"
 }
@@ -207,12 +230,22 @@ build_env_json() {
           .[$pair[0:$at]] = $pair[$at + 1:])'
 }
 
+# `tool:mode,tool:mode` from the registry -> {"tool":"mode",...} or null.
+build_tool_exposure_json() { # build_tool_exposure_json <csv>
+  [ -z "${1:-}" ] && { printf 'null'; return 0; }
+  printf '%s\n' "$1" | tr ',' '\n' \
+    | jq -R -s 'split("\n") | map(select(length > 0)) |
+        reduce .[] as $pair ({}; ($pair | index(":")) as $at |
+          if $at == null then . else .[$pair[0:$at]] = $pair[$at + 1:] end)'
+}
+
 cmd_install() {
   require_known_server
-  local dir desc timeout package entry_path node_bin
+  local dir desc timeout tool_expose package entry_path node_bin
   dir="$(server_field "$TARGET" 2)"
   desc="$(server_field "$TARGET" 3)"
   timeout="$(server_field "$TARGET" 4)"
+  tool_expose="$(server_field "$TARGET" 5)"
   package="$ROOT/$dir/package.json"
   entry_path="$ROOT/$dir/dist/server.js"
   node_bin="$(command -v node || true)"
@@ -226,6 +259,7 @@ cmd_install() {
   note "entry:  $entry_path"
   note "pi:     $MCP_JSON"
   note "exposure: $EXPOSURE"
+  [ -n "$tool_expose" ] && note "tool exposure: $tool_expose (merged, other tools untouched)"
   [ "${#ENV_PAIRS[@]}" -gt 0 ] && note "env:    $(printf '%s\n' "${ENV_PAIRS[@]}" | cut -d= -f1 | paste -sd ',' -) (values not shown)"
   [ -n "$timeout" ] && note "timeout: ${timeout}s (seed for a new entry only)"
 
@@ -262,11 +296,11 @@ cmd_install() {
 
   [ "$REGISTER" = true ] || { step "done"; note "registration skipped (--no-pi)"; return 0; }
 
-  register "$TARGET" "$desc" "$node_bin" "$entry_path" "$timeout"
+  register "$TARGET" "$desc" "$node_bin" "$entry_path" "$timeout" "$tool_expose"
 }
 
-register() { # register <name> <description> <node-bin> <entry-path> <timeout>
-  local name="$1" desc="$2" node_bin="$3" entry_path="$4" timeout="$5"
+register() { # register <name> <description> <node-bin> <entry-path> <timeout> <tool-expose>
+  local name="$1" desc="$2" node_bin="$3" entry_path="$4" timeout="$5" tool_expose="${6:-}"
   step "Pi registration ($MCP_JSON)"
 
   local dir; dir="$(dirname "$MCP_JSON")"
@@ -282,17 +316,18 @@ register() { # register <name> <description> <node-bin> <entry-path> <timeout>
   jq -e . "$MCP_JSON" >/dev/null 2>&1 \
     || die "$MCP_JSON is not valid JSON; fix it before registering (no changes made)"
 
-  local backup env_json tmp
+  local backup env_json tool_exposure_json tmp
   backup="$MCP_JSON.bak.$(date +%Y%m%d-%H%M%S)"
   cp -p "$MCP_JSON" "$backup"
   note "backup: $backup"
 
   env_json="$(build_env_json)"
+  tool_exposure_json="$(build_tool_exposure_json "$tool_expose")"
 
   tmp="$(mktemp "$dir/.mcp.json.tmp.XXXXXX")"
   if ! jq --arg n "$name" --arg cmd "$node_bin" --arg path "$entry_path" \
           --arg desc "$desc" --arg exposure "$EXPOSURE" --arg timeout "$timeout" \
-          --argjson env "$env_json" '
+          --argjson env "$env_json" --argjson toolExposure "$tool_exposure_json" '
         .mcpServers //= {} |
         .mcpServers[$n] = (
           ((.mcpServers[$n] // {}) + {
@@ -303,6 +338,7 @@ register() { # register <name> <description> <node-bin> <entry-path> <timeout>
           })
           | if ($timeout != "" and (.timeout == null)) then .timeout = ($timeout | tonumber) else . end
           | if $env == null then . else .env = ((.env // {}) + $env) end
+          | if $toolExposure == null then . else .toolExposure = ((.toolExposure // {}) + $toolExposure) end
         )
       ' "$MCP_JSON" >"$tmp"; then
     rm -f "$tmp"

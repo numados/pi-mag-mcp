@@ -1,0 +1,69 @@
+{
+  "$comment": "Machine requirements for search-mcp. Single owner: src/requirements.ts reads this file for `providers {action:\"doctor\"}` and install.sh reads the same file with jq for `list`. Nothing here installs anything; each entry names the exact command and the package manager it needs, so the doctor can tell 'missing but installable here' from 'cannot be installed on this machine'. `check` is the binary looked up on PATH; `manager` is the binary that would install it; `required` marks the ones the basic chains need; `auth: true` means the binary can exist without a working subscription.",
+  "binaries": [
+    {
+      "provider": "rg",
+      "check": "rg",
+      "what": "ripgrep — lexical floor of every chain (text, structure, semantic, crossrepo)",
+      "install": "brew install ripgrep",
+      "manager": "brew",
+      "required": true
+    },
+    {
+      "provider": "fd",
+      "check": "fd",
+      "what": "filename search (files, docs); falls back to the vendored ~/.pi/agent/bin/fd",
+      "install": "brew install fd",
+      "manager": "brew",
+      "required": true
+    },
+    {
+      "provider": "mdfind",
+      "check": "mdfind",
+      "what": "macOS Spotlight CLI — machine-wide filename search (built into macOS)",
+      "required": false
+    },
+    {
+      "provider": "ast-grep",
+      "check": "ast-grep",
+      "what": "structural (syntax-aware) code search",
+      "install": "brew install ast-grep",
+      "manager": "brew",
+      "required": true
+    },
+    {
+      "provider": "rga",
+      "check": "rga",
+      "what": "document search inside PDF/Office/ebook/archives",
+      "install": "brew install ripgrep-all",
+      "manager": "brew",
+      "required": true
+    },
+    {
+      "provider": "auggie",
+      "check": "auggie",
+      "what": "semantic codebase retrieval (paid subscription)",
+      "install": "brew install augmentcode/tap/auggie",
+      "manager": "brew",
+      "required": false,
+      "auth": true
+    },
+    {
+      "provider": "serena",
+      "check": "uvx",
+      "what": "free offline semantic fallback (LSP symbols)",
+      "install": "brew install uv",
+      "manager": "brew",
+      "required": false
+    },
+    {
+      "provider": "zoekt",
+      "check": "zoekt-webserver",
+      "what": "cross-repo trigram index; disabled by default",
+      "install": "go install github.com/sourcegraph/zoekt/cmd/...@latest",
+      "manager": "go",
+      "required": false,
+      "postSetup": ["zoekt-webserver &", "zoekt-index <roots>"]
+    }
+  ]
+}
