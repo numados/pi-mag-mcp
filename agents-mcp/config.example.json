@@ -1,0 +1,62 @@
+{
+  "$comment": "agents-mcp config — copy to ~/.config/agents-mcp/config.json (or set AGENTS_MCP_CONFIG). Per-repo override: .agents-mcp.json in the repo root (defaults, agents, aliases, and routing merge over this). An alias = one CLI subscription: command + args + env. env values: literal, ~/path (expanded), or \"env:VAR\" (expanded from environment). envClear removes vars before env applies (subscription isolation). Priority: request arg > alias pin > Jev choice > defaults.",
+  "defaults": {
+    "claude": { "alias": "numados", "model": "claude-opus-4-8[1m]", "effort": "high" },
+    "codex": { "model": "gpt-6.1-sol", "effort": "low" }
+  },
+  "agents": {
+    "agy": { "command": "agy", "model": "Gemini 3.8 Flash (High)" }
+  },
+  "aliases": {
+    "cc": {
+      "command": "claude",
+      "effort": "high"
+    },
+    "numados": {
+      "command": "claude",
+      "args": ["--dangerously-skip-permissions"],
+      "effort": "low",
+      "envClear": [
+        "CLAUDE_CODE_USE_FOUNDRY",
+        "ANTHROPIC_FOUNDRY_BASE_URL",
+        "ANTHROPIC_BASE_URL",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL"
+      ]
+    },
+    "work": {
+      "command": "claude",
+      "args": ["--dangerously-skip-permissions"],
+      "effort": "low",
+      "model": "claude-opus-4-5",
+      "env": {
+        "CLAUDE_CODE_USE_FOUNDRY": "1",
+        "ANTHROPIC_FOUNDRY_BASE_URL": "https://your-gateway.example/ai/anthropic",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-4-5",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-4-5"
+      }
+    }
+  },
+  "routing": {
+    "$comment": "Stage 2: Jev routing for agent_call{agent:\"auto\"}. enabled default true (needs TYPESAFE_API_KEY, else silent fallback); fallback agent used on any routing failure; candidates = registry Jev chooses from — note is the cost/capability hint shown as choice criteria, effortByComplexity maps the Jev complexity rating to effort (request arg and alias pin still outrank it).",
+    "enabled": true,
+    "fallback": "agy",
+    "timeoutMs": 10000,
+    "candidates": {
+      "agy": {
+        "note": "free, fastest, no subscription minutes; selectable Gemini model; weakest reasoning — bounded fact-finding, simple lookups, mechanical checks"
+      },
+      "codex": {
+        "note": "GPT-6.1 Sol on a Codex subscription (metered); strong general engineer; effort low runs read-only, medium/high may write to the workspace",
+        "effortByComplexity": { "standard": "low", "complex": "medium" },
+        "models": ["gpt-6.1-sol"]
+      },
+      "claude": {
+        "note": "Claude Opus on a Claude subscription (metered, most expensive); strongest reasoning — subtle design, hard debugging, high-stakes review",
+        "effortByComplexity": { "standard": "low", "complex": "high" }
+      }
+    }
+  }
+}

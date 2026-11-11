@@ -1,0 +1,24 @@
+{
+  "name": "agents-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Inter-agent channel MCP server for Pi: agent_call drives claude/codex/agy CLIs in research, opinion or review mode with subscription aliases and Jev auto-routing; agents_status is the doctor",
+  "main": "dist/server.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "npm run build && node --test --test-concurrency=4 tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "$comment": "agents-mcp machine requirements. Single owner of this table: src/server.ts --doctor renders CLI presence live, and ../install.sh reads the same file with jq for `list`. Nothing here installs anything. Every CLI is optional on its own: the matching agent is simply unavailable and agents_status reports it; routing degrades to the configured fallback. TYPESAFE_API_KEY is an env requirement, not a binary.",
+  "binaries": [
+    {
+      "provider": "claude",
+      "check": "claude",
+      "what": "the Claude Code CLI the claude adapter spawns",
+      "install": "npm install -g @anthropic-ai/claude-code  # then: claude login",
+      "manager": "npm",
+      "required": false
+    },
+    {
+      "provider": "codex",
+      "check": "codex",
+      "what": "the Codex CLI the codex adapter spawns",
+      "install": "brew install codex  # then: codex login",
+      "manager": "brew",
+      "required": false
+    },
+    {
+      "provider": "agy",
+      "check": "agy",
+      "what": "the Antigravity CLI the agy adapter spawns (the default routing fallback)",
+      "install": "install the Antigravity CLI from https://antigravity.google",
+      "manager": null,
+      "required": false
+    }
+  ],
+  "env": [
+    {
+      "name": "TYPESAFE_API_KEY",
+      "what": "enables the Jev classifier for agent_call{agent:\"auto\"}; without it auto routing always uses the fallback agent",
+      "required": false
+    }
+  ]
+}
