@@ -12,7 +12,7 @@
   },
   "jira": {
     "domain": "https://your-company.atlassian.net",
-    "email": "you@example.com",
+    "email": "your-jira-login",
     "token": "env:DEVWORK_JIRA_TOKEN",
     "projects": ["ABC"],
     "auth": "off"

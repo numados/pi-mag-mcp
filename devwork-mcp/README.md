@@ -130,7 +130,7 @@ policy.
   "defaultBackend": "github",
   "github": { "apiBase": "https://api.github.com", "repositories": ["acme/example-service"],
               "defaultRepo": "acme/example-service", "token": "env:DEVWORK_GITHUB_TOKEN", "auth": "token" },
-  "jira":   { "domain": "https://your-company.atlassian.net", "email": "you@example.com",
+  "jira":   { "domain": "https://your-company.atlassian.net", "email": "your-jira-login",
               "token": "env:DEVWORK_JIRA_TOKEN", "projects": ["ABC"], "auth": "off" },
   "ado":    { "org": "https://dev.azure.com/your-org", "project": "Your Project",
               "projects": ["Your Project"], "pat": "env:DEVWORK_ADO_PAT", "auth": "off" },

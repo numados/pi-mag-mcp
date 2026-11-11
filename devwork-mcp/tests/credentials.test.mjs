@@ -82,12 +82,12 @@ test("Jira needs domain, email and token together", async () => {
   assert.ok(missing.notes.some((note) => /incomplete/.test(note)));
 
   const complete = new CredentialResolver(
-    installation({ jira: { domain: "https://example.atlassian.net", email: "dev@example.com", token: "env:JIRA_TOKEN", projects: ["ABC"], auth: "token" } }),
+    installation({ jira: { domain: "https://example.atlassian.net", email: "dev-login", token: "env:JIRA_TOKEN", projects: ["ABC"], auth: "token" } }),
     { JIRA_TOKEN: "jira-secret" },
   );
   const ok = complete.jira();
   assert.equal(ok.mode, "token");
-  assert.equal(ok.email, "dev@example.com");
+  assert.equal(ok.email, "dev-login");
   assert.equal(ok.token, "jira-secret");
   assert.equal(ok.domain, "https://example.atlassian.net");
 });

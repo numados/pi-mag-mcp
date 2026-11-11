@@ -1,5 +1,5 @@
 /**
- * One string in — bare id, KEY-123, owner/repo#123, or an ADO/Jira/GitHub web
+ * One string in — bare id, ABC-123, owner/repo#123, or an ADO/Jira/GitHub web
  * URL — resolved to a routing target. Scope is NOT decided here: route.ts only
  * says where the reference points, scope.ts decides whether this installation
  * may touch it. Keeping the two apart is what makes an out-of-scope reference
@@ -18,7 +18,7 @@ export interface RouteTarget {
   /** ADO project (decoded) or GitHub "owner/repo", when captured. */
   project?: string;
   repo?: string;
-  /** Jira issue key (KEY-123), when applicable. */
+  /** Jira issue key (ABC-123), when applicable. */
   key?: string;
 }
 

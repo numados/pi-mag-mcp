@@ -16,7 +16,7 @@ function installation(overrides = {}) {
     source: "/tmp/profile.json",
     defaultBackend: "ado",
     github: { apiBase: "https://api.github.com", repositories: ["acme/service-x"], auth: "token", ...overrides.github },
-    jira: { domain: "https://example.atlassian.net", email: "dev@example.com", token: "env:JIRA", projects: ["ABC"], auth: "token", ...overrides.jira },
+    jira: { domain: "https://example.atlassian.net", email: "dev-login", token: "env:JIRA", projects: ["ABC"], auth: "token", ...overrides.jira },
     ado: { org: "https://dev.azure.com/acme", project: "Service X", projects: ["Service X"], requestTimeoutMs: 30_000, auth: "token", ...overrides.ado },
     write: { policy: "read-only", requirePreview: true },
     cacheTtlSeconds: 60,
@@ -31,9 +31,9 @@ test("a bare number routes to the default backend", () => {
 
 test("Jira keys route only for projects this installation knows", () => {
   assert.deepEqual(parseRef("ABC-42", table), { backend: "jira", kind: "item", id: "ABC-42", key: "ABC-42" });
-  assert.equal(parseRef("OTHER-42", table), null, "an unknown project is not silently routed");
+  assert.equal(parseRef("PLAN-42", table), null, "an unknown project is not silently routed");
   const wildcard = { ...table, jira: { projects: [] } };
-  assert.equal(parseRef("OTHER-42", wildcard)?.backend, "jira", "an empty table keeps the old any-key behaviour at the routing layer; scope still refuses it");
+  assert.equal(parseRef("PLAN-42", wildcard)?.backend, "jira", "an empty table keeps the old any-key behaviour at the routing layer; scope still refuses it");
 });
 
 test("GitHub references keep the repository", () => {

@@ -109,7 +109,7 @@ test("the repository layer may select an installation and narrow routing only", 
 test("a repository cannot widen the Jira project allowlist", () => {
   const f = fixture({
     ...base,
-    jira: { domain: "https://example.atlassian.net", email: "dev@example.com", token: "env:JIRA", projects: ["ABC"] },
+    jira: { domain: "https://example.atlassian.net", email: "dev-login", token: "env:JIRA", projects: ["ABC"] },
   });
   mkdirSync(f.repo, { recursive: true });
   writeFileSync(path.join(f.repo, ".git"), "gitdir: elsewhere\n");
@@ -143,7 +143,7 @@ test("an unpinned profile is refused", () => {
 test("non-https endpoints are rejected outside loopback", () => {
   const f = fixture({
     ...base,
-    jira: { domain: "http://example.atlassian.net", email: "dev@example.com", token: "env:JIRA", projects: ["ABC"] },
+    jira: { domain: "http://example.atlassian.net", email: "dev-login", token: "env:JIRA", projects: ["ABC"] },
   });
   const loaded = loadInstallation({ env: { DEVWORK_INSTALLATION_FILE: f.file }, cwd: f.repo });
   assert.match(loaded.error, /must use https/);

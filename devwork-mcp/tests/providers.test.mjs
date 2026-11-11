@@ -23,7 +23,7 @@ test("ADO items normalize fields, identity and hours", () => {
         "System.WorkItemType": "Task",
         "System.Title": "Implement login",
         "System.State": "In Progress",
-        "System.AssignedTo": { displayName: "Ada", uniqueName: "ada@example.com" },
+        "System.AssignedTo": { displayName: "Ada", uniqueName: "ada-login" },
         "System.Tags": "backend; ui ;",
         "Microsoft.VSTS.Scheduling.RemainingWork": 8,
         "Microsoft.VSTS.Scheduling.CompletedWork": 2,
@@ -37,7 +37,7 @@ test("ADO items normalize fields, identity and hours", () => {
   assert.equal(item.backend, "ado");
   assert.equal(item.type, "Task");
   assert.equal(item.state, "In Progress");
-  assert.equal(item.assignedTo, "ada@example.com", "uniqueName wins over displayName");
+  assert.equal(item.assignedTo, "ada-login", "uniqueName wins over displayName");
   assert.deepEqual(item.tags, ["backend", "ui"]);
   assert.equal(item.remaining, "8");
   assert.equal(item.completed, "2");
