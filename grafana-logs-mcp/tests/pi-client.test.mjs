@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -53,11 +54,29 @@ test("pi client lists both tools and the unconfigured query answers a named erro
     return;
   }
 
-  // Env deliberately empty: the smoke test must not touch a real Grafana.
-  const serverEnv = {
-    PATH: process.env.PATH ?? "",
-    HOME: process.env.HOME ?? "/tmp",
-  };
+test("--doctor prints the readiness report over plain stdio and exits by env state", () => {
+  const withEnv = spawnSync(process.execPath, [serverEntry, "--doctor"], {
+    env: { PATH: process.env.PATH ?? "", GRAFANA_URL: "https://grafana.example.net", GRAFANA_DATASOURCE_UID: "uid-1" },
+    encoding: "utf8",
+  });
+  assert.equal(withEnv.status, 0, withEnv.stderr);
+  assert.match(withEnv.stdout, /grafana-logs status/);
+  assert.match(withEnv.stdout, /GRAFANA_URL: set/);
+  assert.match(withEnv.stdout, /GRAFANA_DATASOURCE_UID: set/);
+
+  const withoutEnv = spawnSync(process.execPath, [serverEntry, "--doctor"], {
+    env: { PATH: process.env.PATH ?? "" },
+    encoding: "utf8",
+  });
+  assert.equal(withoutEnv.status, 1, withoutEnv.stderr);
+  assert.match(withoutEnv.stdout, /GRAFANA_URL: missing/);
+  assert.match(withoutEnv.stdout, /GRAFANA_DATASOURCE_UID: missing/);
+});
+
+const serverEnv = {
+  PATH: process.env.PATH ?? "",
+  HOME: process.env.HOME ?? "/tmp",
+};
 
   const { McpClient, StdioTransport } = pi;
   const transport = new StdioTransport({
@@ -79,6 +98,12 @@ test("pi client lists both tools and the unconfigured query answers a named erro
   for (const tool of listed) {
     assert.ok(tool.outputSchema, `outputSchema must be declared for ${tool.name}`);
   }
+  // The advertised hints must match reality: query reads, raw can mutate.
+  const query = listed.find((x) => x.name === "grafana_logs_query");
+  const raw = listed.find((x) => x.name === "grafana_logs_raw");
+  assert.equal(query?.annotations?.readOnlyHint, true);
+  assert.equal(raw?.annotations?.readOnlyHint, false);
+  assert.equal(raw?.annotations?.destructiveHint, true);
 
   const call = await client.callTool("grafana_logs_query", { query: "*" });
   assert.equal(call.isError, true);

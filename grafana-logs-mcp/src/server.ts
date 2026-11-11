@@ -27,6 +27,7 @@ import {
   rawOutputSchema,
 } from "./contract.js";
 import { loadConfig, type GrafanaConfig } from "./config.js";
+import { doctorReport } from "./doctor.js";
 import { countResults, extractRawFrameInfo, formatResults, tryFormatJson } from "./format.js";
 import { buildQueryPayload, grafanaApiUrl, grafanaFetch } from "./grafana.js";
 
@@ -143,8 +144,9 @@ function createServer(config: GrafanaConfig): McpServer {
     {
       instructions:
         "Grafana/Quickwit logs: grafana_logs_query runs Quickwit queries (QQL) through the configured " +
-        "datasource and returns formatted entries; grafana_logs_raw is a debugging passthrough pinned to " +
-        "/api paths on the configured origin. Both are read-only; redirects and cross-origin targets are refused.",
+        "datasource and returns formatted entries; it is read-only. grafana_logs_raw is a debugging " +
+        "passthrough that forwards arbitrary HTTP methods to /api paths on the configured origin — it can " +
+        "mutate the Grafana instance, so treat it as privileged. Redirects and cross-origin targets are refused.",
     },
   );
 
@@ -167,7 +169,9 @@ function createServer(config: GrafanaConfig): McpServer {
       description: RAW_DESCRIPTION,
       inputSchema: rawInputSchema,
       outputSchema: rawOutputSchema,
-      annotations: { title: "Grafana Raw Query", readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      // A raw passthrough can issue mutating requests (DELETE /api/...), so it
+      // must not advertise read-only.
+      annotations: { title: "Grafana Raw Query", readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
     async (args, ctx): Promise<CallToolResult> => runRaw(args, config, ctx.mcpReq.signal),
   );
@@ -176,6 +180,14 @@ function createServer(config: GrafanaConfig): McpServer {
 }
 
 async function main(): Promise<void> {
+  if (process.argv.includes("--doctor")) {
+    // The installer's `list` runs this against requirements.json and prints
+    // the report; exit 1 means a required environment value is missing.
+    const report = doctorReport();
+    process.stdout.write(report.text);
+    process.exit(report.ok ? 0 : 1);
+  }
+
   let config: GrafanaConfig;
   try {
     config = loadConfig();

@@ -19,7 +19,12 @@ interface QueryFrame {
 }
 
 function toResults(data: unknown): Record<string, QueryResult> | undefined {
-  if (typeof data !== "object" || data === null) return undefined;
+  // The source crashed with a TypeError here and answered the parse-error
+  // path; keep that behavior for non-object payloads instead of rendering
+  // them as JSON.
+  if (typeof data !== "object" || data === null) {
+    throw new Error("malformed ds/query response: not an object");
+  }
   const results = (data as Record<string, unknown>).results;
   if (typeof results !== "object" || results === null) return undefined;
   return results as Record<string, QueryResult>;
@@ -95,9 +100,17 @@ export function formatResults(data: unknown): string {
       for (const frame of frames) {
         const fields = frame.schema?.fields ?? [];
         const values = frame.data?.values ?? [];
-        if (values.length === 0 || (values[0]?.length ?? 0) === 0) continue;
+        const first = values[0];
+        if (values.length === 0) continue;
+        if (!Array.isArray(first)) {
+          // The source crashed here (non-null assertion on a null column) and
+          // surfaced the parse-error path; keep that signal instead of
+          // silently answering "no results" for a malformed frame.
+          throw new Error("malformed frame: first column is not an array");
+        }
+        if (first.length === 0) continue;
 
-        const rowCount = values[0]?.length ?? 0;
+        const rowCount = first.length;
         const colCount = values.length;
 
         const colByName: Record<string, number> = {};
@@ -122,7 +135,7 @@ export function formatResults(data: unknown): string {
         for (let row = 0; row < rowCount; row++) {
           const get = (col: number): string => {
             if (col < 0 || col >= colCount) return "";
-            const v = values[col]?.[row];
+            const v = col === 0 ? first[row] : values[col]?.[row];
             if (v === null || v === undefined) return "";
             return String(v);
           };
@@ -155,7 +168,10 @@ export function formatResults(data: unknown): string {
     const header = `📋 ${totalCount} log entries:\n${"─".repeat(80)}`;
     return header + "\n" + lines.join("\n");
   } catch (err) {
-    return `⚠️ Error parsing results: ${err}\nRaw response:\n${JSON.stringify(data, null, 2).substring(0, 2000)}`;
+    // JSON.stringify returns undefined for undefined input, so fall back to
+    // String() before clipping — the warning path must never throw itself.
+    const raw = String(JSON.stringify(data, null, 2) ?? data);
+    return `⚠️ Error parsing results: ${err}\nRaw response:\n${raw.substring(0, 2000)}`;
   }
 }
 

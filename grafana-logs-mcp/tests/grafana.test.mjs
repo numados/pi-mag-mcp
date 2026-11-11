@@ -114,6 +114,17 @@ test("buildQueryPayload shape", () => {
   assert.deepEqual(p.queries[0]?.metrics, [{ id: "3", type: "logs" }]);
 });
 
+test("malformed responses surface the parse-error path like the source", () => {
+  // Source parity: non-object payloads and malformed frames reached the
+  // ⚠️ Error parsing results path (via TypeError in the source).
+  assert.match(formatResults(null), /Error parsing results/);
+  assert.match(formatResults(undefined), /Error parsing results/);
+  const nullColumn = { results: { A: { frames: [{ schema: { fields: [{ name: "a", type: "string" }] }, data: { values: [null] } }] } } };
+  assert.match(formatResults(nullColumn), /Error parsing results/);
+  // An object without a results object is still rendered as JSON, not an error.
+  assert.equal(formatResults({}), "{}");
+});
+
 test("loadConfig trims the URL and defaults the datasource type", () => {
   const config = loadConfig({
     GRAFANA_URL: "https://grafana.example.net///",

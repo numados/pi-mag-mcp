@@ -1,13 +1,18 @@
 # grafana-logs-mcp
 
-Two read-only tools against a Grafana instance with a Quickwit datasource:
+Two tools against a Grafana instance with a Quickwit datasource:
 
-- `grafana_logs_query` — Quickwit query language (QQL), returns formatted log
+- `grafana_logs_query` — read-only Quickwit query language (QQL) search, returns formatted log
   entries (timestamp, severity emoji, service, body) plus the available field
   list. `timeRange` in Grafana notation (`now-1h` …), `limit` 1–1000.
-- `grafana_logs_raw` — raw Grafana API request for debugging
-  (`GET /api/datasources`, `POST /api/ds/query`, …). Only `/api` paths on the
-  configured origin are accepted; redirects are refused.
+- `grafana_logs_raw` — raw Grafana API passthrough for debugging
+  (`GET /api/datasources`, `POST /api/ds/query`, …). It forwards arbitrary
+  HTTP methods, so it **can mutate the Grafana instance**; only `/api` paths
+  on the configured origin are accepted and redirects are refused.
+
+`node dist/server.js --doctor` prints the environment readiness report
+(values are never printed) and exits non-zero while a required variable is
+missing; `./install.sh list` runs it for the requirements section.
 
 Ported from the `agent-toolkit` catalogue at source revision `e985502`
 (2026-10-19) with no local diff; the transport boundary, clamps and error
