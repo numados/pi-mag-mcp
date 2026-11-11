@@ -47,6 +47,7 @@ REGISTRY=(
   "devwork|devwork-mcp|devwork: work items and pull requests across GitHub, Jira Cloud and Azure DevOps behind one routing table; one installation per repository binds credentials, scope and write policy, reads are direct and every write returns a preview first|120|devwork_status:direct,devwork_get:direct,devwork_query:direct"
   "repo|repo-mcp|repo: explicit Git tools — read checks, fetch/pull --ff-only, staged-only commit with a size preflight, token-bound previews for branch/merge/rebase/reset/restore/switch/clean, and branch/commit generation; no push/send-pack tool exists|300|"
   "agents|agents-mcp|agents: agent_call drives claude/codex/agy CLIs in research, opinion or review mode with subscription aliases, cooldown-aware Jev auto-routing and one structured envelope, plus an agents_status doctor|900|agent_call:direct"
+  "grafana-logs|grafana-logs-mcp|grafana-logs: grafana_logs_query runs Quickwit (QQL) log searches through the Grafana ds/query API with formatted severity-marked entries, and grafana_logs_raw is an origin-pinned raw debug passthrough; env-configured, TLS verified, redirects refused||"
 )
 
 server_field() { # server_field <name> <1|2|3|4|5>

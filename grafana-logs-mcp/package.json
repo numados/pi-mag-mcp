@@ -1,0 +1,24 @@
+{
+  "name": "grafana-logs-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Grafana/Quickwit log MCP server for Pi: grafana_logs_query (QQL search through the Grafana ds/query API with formatted entries) and grafana_logs_raw (origin-pinned raw debug passthrough); env-configured, TLS verified",
+  "main": "dist/server.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "npm run build && node --test --test-concurrency=4 tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}

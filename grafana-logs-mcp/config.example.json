@@ -1,0 +1,7 @@
+{
+  "$comment": "grafana-logs-mcp — env-only config, machine-local values. GRAFANA_URL and GRAFANA_DATASOURCE_UID are required; GRAFANA_DATASOURCE_TYPE defaults to quickwit-quickwit-datasource.",
+  "env": {
+    "GRAFANA_URL": "https://grafana.your-company.net",
+    "GRAFANA_DATASOURCE_UID": "YOUR-DATASOURCE-UID"
+  }
+}

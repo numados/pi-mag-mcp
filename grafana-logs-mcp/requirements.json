@@ -1,0 +1,21 @@
+{
+  "$comment": "grafana-logs-mcp machine requirements. Nothing here installs anything: both required values are machine-local Grafana coordinates, set through the server entry env (see config.example.json). Without them the server still starts and answers tools/list, but every tool call reports the missing configuration instead of guessing a target.",
+  "binaries": [],
+  "env": [
+    {
+      "name": "GRAFANA_URL",
+      "what": "canonical base URL of the Grafana instance, e.g. https://grafana.example.net — redirects are rejected and embedded credentials are rejected",
+      "required": true
+    },
+    {
+      "name": "GRAFANA_DATASOURCE_UID",
+      "what": "UID of the Quickwit datasource to query",
+      "required": true
+    },
+    {
+      "name": "GRAFANA_DATASOURCE_TYPE",
+      "what": "overrides the Grafana datasource type plugin id; defaults to quickwit-quickwit-datasource",
+      "required": false
+    }
+  ]
+}
