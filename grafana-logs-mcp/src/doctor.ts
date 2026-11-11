@@ -18,6 +18,7 @@ export function doctorReport(env: NodeJS.ProcessEnv = process.env): DoctorReport
     `  GRAFANA_URL: ${url ? "set" : "missing"}`,
     `  GRAFANA_DATASOURCE_UID: ${uid ? "set" : "missing"}`,
     `  GRAFANA_DATASOURCE_TYPE: ${env.GRAFANA_DATASOURCE_TYPE ?? "quickwit-quickwit-datasource (default)"}`,
+    `  GRAFANA_API_TOKEN: ${env.GRAFANA_API_TOKEN ? "set" : "missing (optional — anonymous requests)"}`,
   ];
   const ok = Boolean(url && uid);
   if (!ok) {

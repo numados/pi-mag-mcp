@@ -39,6 +39,14 @@ baked into the server); `requirements.json` owns the table:
 | `GRAFANA_URL` | exact canonical HTTPS base URL; redirects and embedded credentials are rejected, e.g. `https://grafana.your-company.net` |
 | `GRAFANA_DATASOURCE_UID` | Quickwit datasource UID |
 | `GRAFANA_DATASOURCE_TYPE` | default `quickwit-quickwit-datasource` |
+| `GRAFANA_API_TOKEN` | optional; a Grafana service-account token or legacy API key — every request then carries `Authorization: Bearer …` |
+
+Authentication is optional: without `GRAFANA_API_TOKEN` requests are
+anonymous and the instance is reached through network-level access (VPN)
+only. When the token is set, `grafanaFetch` is the single place that
+attaches the header, and refused redirects mean it can never be replayed
+to another origin. The token is never printed — the doctor reports
+presence only.
 
 Without the required env the server still starts and answers `tools/list`;
 calls return a clear configuration error instead of guessing a target.

@@ -105,6 +105,30 @@ test("grafanaFetch refuses cross-origin redirects", async (t) => {
   assert.equal(targetRequests, 0);
 });
 
+test("grafanaFetch attaches the auth header only when configured", async (t) => {
+  let seen = {};
+  let requests = 0;
+  const server = createServer((req, res) => {
+    requests++;
+    seen = { authorization: req.headers.authorization };
+    res.end("ok");
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    server.closeAllConnections?.();
+    await new Promise((resolve) => server.close(resolve));
+  });
+  const url = `http://127.0.0.1:${server.address().port}/api/test`;
+
+  await grafanaFetch(url, { method: "POST", authHeader: "Bearer test-token" });
+  assert.equal(requests, 1);
+  assert.equal(seen.authorization, "Bearer test-token");
+
+  await grafanaFetch(url, { method: "POST" });
+  assert.equal(requests, 2);
+  assert.equal(seen.authorization, undefined);
+});
+
 test("buildQueryPayload shape", () => {
   const p = buildQueryPayload('serviceName:"x"', "quickwit-quickwit-datasource", "UID", "now-1h", 50);
   assert.equal(p.queries[0]?.datasource.uid, "UID");
@@ -140,6 +164,19 @@ test("loadConfig trims the URL and defaults the datasource type", () => {
     GRAFANA_DATASOURCE_TYPE: "other-datasource",
   });
   assert.equal(typed.datasourceType, "other-datasource");
+
+  const withToken = loadConfig({
+    GRAFANA_URL: "https://grafana.example.net",
+    GRAFANA_DATASOURCE_UID: "uid-1",
+    GRAFANA_API_TOKEN: "  test-token  ",
+  });
+  assert.equal(withToken.authHeader, "Bearer test-token");
+
+  const withoutToken = loadConfig({
+    GRAFANA_URL: "https://grafana.example.net",
+    GRAFANA_DATASOURCE_UID: "uid-1",
+  });
+  assert.equal(withoutToken.authHeader, undefined);
 
   assert.throws(() => loadConfig({}), /GRAFANA_URL and GRAFANA_DATASOURCE_UID must be set/);
 });

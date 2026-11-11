@@ -20,6 +20,8 @@ interface GrafanaRequestOptions {
   method?: string;
   headers?: Record<string, string>;
   body?: string;
+  /** Fully-formed Authorization header value; attached here and nowhere else. */
+  authHeader?: string;
   signal?: AbortSignal;
 }
 
@@ -45,7 +47,19 @@ export async function grafanaFetch(
   options: Omit<GrafanaRequestOptions, "signal"> = {},
   signal?: AbortSignal,
 ): Promise<Response> {
-  return fetch(url, { ...options, redirect: "error", signal: combineSignal(30_000, signal) });
+  // Single injection point for credentials: the auth header is attached here
+  // so both tools and every future caller behave the same, and `redirect:
+  // "error"` below guarantees the header can never be replayed to another
+  // origin by a redirect.
+  const { authHeader, ...rest } = options;
+  const headers: Record<string, string> = { ...rest.headers };
+  if (authHeader) headers.Authorization = authHeader;
+  return fetch(url, {
+    ...rest,
+    headers,
+    redirect: "error",
+    signal: combineSignal(30_000, signal),
+  });
 }
 
 export interface QueryPayload {

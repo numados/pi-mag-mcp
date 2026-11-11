@@ -56,13 +56,14 @@ test("pi client lists both tools and the unconfigured query answers a named erro
 
 test("--doctor prints the readiness report over plain stdio and exits by env state", () => {
   const withEnv = spawnSync(process.execPath, [serverEntry, "--doctor"], {
-    env: { PATH: process.env.PATH ?? "", GRAFANA_URL: "https://grafana.example.net", GRAFANA_DATASOURCE_UID: "uid-1" },
+    env: { PATH: process.env.PATH ?? "", GRAFANA_URL: "https://grafana.example.net", GRAFANA_DATASOURCE_UID: "uid-1", GRAFANA_API_TOKEN: "test-token" },
     encoding: "utf8",
   });
   assert.equal(withEnv.status, 0, withEnv.stderr);
   assert.match(withEnv.stdout, /grafana-logs status/);
   assert.match(withEnv.stdout, /GRAFANA_URL: set/);
   assert.match(withEnv.stdout, /GRAFANA_DATASOURCE_UID: set/);
+  assert.match(withEnv.stdout, /GRAFANA_API_TOKEN: set/);
 
   const withoutEnv = spawnSync(process.execPath, [serverEntry, "--doctor"], {
     env: { PATH: process.env.PATH ?? "" },
@@ -71,6 +72,9 @@ test("--doctor prints the readiness report over plain stdio and exits by env sta
   assert.equal(withoutEnv.status, 1, withoutEnv.stderr);
   assert.match(withoutEnv.stdout, /GRAFANA_URL: missing/);
   assert.match(withoutEnv.stdout, /GRAFANA_DATASOURCE_UID: missing/);
+  assert.match(withoutEnv.stdout, /GRAFANA_API_TOKEN: missing \(optional/);
+  // Values are never printed.
+  assert.ok(!withoutEnv.stdout.includes("test-token"));
 });
 
 const serverEnv = {

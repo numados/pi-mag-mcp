@@ -76,6 +76,7 @@ async function runQuery(params: Record<string, unknown>, config: GrafanaConfig, 
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify(payload),
+        ...(config.authHeader ? { authHeader: config.authHeader } : {}),
       },
       signal,
     );
@@ -126,6 +127,7 @@ async function runRaw(params: Record<string, unknown>, config: GrafanaConfig, si
         method,
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         ...(typeof params.body === "string" ? { body: params.body } : {}),
+        ...(config.authHeader ? { authHeader: config.authHeader } : {}),
       },
       signal,
     );
@@ -194,7 +196,7 @@ async function main(): Promise<void> {
   } catch (e) {
     // Stay up so tools/list works and the error explains what to configure.
     log(String(e instanceof Error ? e.message : e));
-    config = { url: "", datasourceUid: "", datasourceType: "quickwit-quickwit-datasource" };
+    config = { url: "", datasourceUid: "", datasourceType: "quickwit-quickwit-datasource", authHeader: undefined };
   }
 
   const handle = serveStdio(
