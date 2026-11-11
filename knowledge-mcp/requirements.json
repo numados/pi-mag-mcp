@@ -1,0 +1,32 @@
+{
+  "$comment": "Machine requirements for knowledge-mcp. Single owner of the requirement table: the doctor (knowledge_status and --doctor) renders it, ../install.sh reads the same file with jq for `list`. Nothing here installs anything; each entry names the exact command and the package manager it needs, so the doctor can tell 'missing but installable here' from 'cannot be installed on this machine'. `check` is the binary looked up on PATH; `required` marks the ones the server cannot work without; the `setup` block tells install.sh that this server needs a one-time configuration step before it is useful.",
+  "binaries": [
+    {
+      "provider": "rg",
+      "check": "rg",
+      "install": "brew install ripgrep",
+      "manager": "brew",
+      "required": true,
+      "note": "lexical floor of every search path"
+    },
+    {
+      "provider": "qmd",
+      "check": "qmd",
+      "install": "npm i -g @tobilu/qmd",
+      "manager": "npm",
+      "required": false,
+      "note": "BM25 index; without it search degrades to ripgrep, then run qmd collection add <vault> && qmd update"
+    },
+    {
+      "provider": "git",
+      "check": "git",
+      "install": "install git with your package manager",
+      "required": false,
+      "note": "repo root detection for .knowledge-mcp.json"
+    }
+  ],
+  "setup": {
+    "command": "node dist/server.js --setup",
+    "reason": "a vault configuration is required: name the directories that hold your notes"
+  }
+}

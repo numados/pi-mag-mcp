@@ -5,8 +5,8 @@ and registered in `~/.pi/agent/mcp.json`.
 
 ## Status
 
-In progress. Four of the nine servers are implemented and tested:
-`web-search-mcp/`, `office-mcp/`, `teams-mcp/` and `search-mcp/`. Design, source
+In progress. Five of the nine servers are implemented and tested:
+`web-search-mcp/`, `office-mcp/`, `teams-mcp/`, `search-mcp/` and `knowledge-mcp/`. Design, source
 inventory and per-server research live in the local planning workspace
 `.numados/tasks/` (not tracked by git — see `.git/info/exclude`).
 
@@ -16,6 +16,7 @@ inventory and per-server research live in the local planning workspace
 | `office-mcp` | `create_pdf`, `pdf_clean` | implemented and tested; live registration still points at the old catalog |
 | `teams-mcp` | `teams_message` | implemented and tested; not registered on this machine |
 | `search-mcp` | `providers`, `search`, `search_{text,files,structure,docs,semantic,machine,crossrepo}` | implemented and tested; live registration still points at the old catalog |
+| `knowledge-mcp` | `knowledge_{status,search,read,links,structure,write,move,task,repo}` | implemented and tested; live registration still points at the old catalog; the machine's vault configuration still needs `--setup` |
 
 ## Installing a server
 
@@ -29,6 +30,7 @@ entry into Pi's configuration:
 ./install.sh office                   # build, test, register the PDF server
 ./install.sh teams                    # build, test, register the Teams server
 ./install.sh search                   # build, test, register the search router
+./install.sh knowledge                # build, test, register the vault and task server
 ```
 
 A server name is required. Without one the script prints usage and exits 2, so

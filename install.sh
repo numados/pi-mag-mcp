@@ -38,6 +38,7 @@ REGISTRY=(
   "web-search|web-search-mcp|web_search: DuckDuckGo free by default, Tavily deep mode only on explicit quota opt-in; structured results with provenance and explicit failure status||"
   "office|office-mcp|office: create_pdf from images and pdf_clean (grayscale/bw/clean-scan/ocr/optimize/info); local files only, explicit failure causes and no silent overwrite|600|"
   "teams|teams-mcp|teams_message: one Teams channel message by share URL, browser token or Azure CLI fallback, structured failure causes|120|"
+  "knowledge|knowledge-mcp|knowledge: Obsidian-style Markdown vault owner — one source may span several directories, qmd BM25→rg search, bounded read, link graph, two-phase validated writes with format/convention checks, plus the numados-task-* workspace protocol; status/doctor report readiness and setup creates the config|120|knowledge_status:direct,knowledge_search:direct,knowledge_read:direct,knowledge_task:direct"
   "search|search-mcp|search: local search router — text, files, structure, docs, semantic, machine and crossrepo over swappable providers (rg, fd, mdfind, ast-grep, rga, auggie, serena, zoekt) with ordered fallback, availability probing and a doctor report; hits are untrusted file content||search:direct,providers:direct"
 )
 
@@ -215,10 +216,24 @@ cmd_list() {
     else
       printf '  not built yet — build it to see the machine report\n'
     fi
+    print_setup_hint "$req_dir"
   done
 
   printf '\nregistration file: %s\n' "$MCP_JSON"
   return "$status"
+}
+
+# A server may declare a one-time configuration step in requirements.json
+# (`setup: {command, reason}`). The installer never runs it: it prints the
+# command so the configuration stays an explicit, reversible act.
+print_setup_hint() { # print_setup_hint <directory>
+  local file="$ROOT/$1/requirements.json" command reason
+  [ -f "$file" ] || return 0
+  command="$(jq -r '.setup.command // empty' "$file" 2>/dev/null)"
+  [ -n "$command" ] || return 0
+  reason="$(jq -r '.setup.reason // empty' "$file" 2>/dev/null)"
+  printf '\nnext (%s): %s\n' "$1" "$command"
+  [ -n "$reason" ] && printf '  %s\n' "$reason"
 }
 
 build_env_json() {
@@ -274,6 +289,7 @@ cmd_install() {
     note "would run: npm ci && npm run build && npm test in $dir"
     [ "$REGISTER" = true ] && note "would merge the entry into $MCP_JSON (backup first)"
     [ "$REGISTER" = false ] && note "would skip registration (--no-pi)"
+    print_setup_hint "$dir"
     return 0
   fi
 
@@ -294,9 +310,15 @@ cmd_install() {
   # server speaks MCP and still behaves as documented.
   ( cd "$ROOT/$dir" && npm test )
 
-  [ "$REGISTER" = true ] || { step "done"; note "registration skipped (--no-pi)"; return 0; }
+  if [ "$REGISTER" != true ]; then
+    print_setup_hint "$dir"
+    step "done"
+    note "registration skipped (--no-pi)"
+    return 0
+  fi
 
   register "$TARGET" "$desc" "$node_bin" "$entry_path" "$timeout" "$tool_expose"
+  print_setup_hint "$dir"
 }
 
 register() { # register <name> <description> <node-bin> <entry-path> <timeout> <tool-expose>

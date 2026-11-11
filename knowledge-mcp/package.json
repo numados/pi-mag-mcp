@@ -1,0 +1,26 @@
+{
+  "name": "knowledge-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Obsidian-style Markdown knowledge vault MCP server for Pi: named sources that may span several directories with labelled roots, basename wikilink resolution, hybrid qmd→ripgrep search, two-phase confirmed writes and a numados task-tracking protocol, with a doctor report and guided setup",
+  "main": "dist/server.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "doctor": "node dist/server.js --doctor",
+    "setup": "node dist/server.js --setup",
+    "test": "npm run build && node --test --test-concurrency=4 tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}
