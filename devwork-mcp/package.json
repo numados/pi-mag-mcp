@@ -1,0 +1,25 @@
+{
+  "name": "devwork-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Tracker facade MCP server for Pi: work items and pull requests across GitHub, Jira Cloud and Azure DevOps behind one routing table, with a project-scoped installation that binds credentials, scope and write policy",
+  "main": "dist/server.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "doctor": "node dist/server.js --doctor",
+    "test": "npm run build && node --test --test-concurrency=4 tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "$comment": "Machine requirements for devwork-mcp. Single owner of this table: src/doctor.ts renders it for devwork_status and --doctor, and ../install.sh reads the same file with jq for `list`. Nothing here installs anything. `required: false` everywhere is deliberate: an installation that carries its own credentials needs neither `gh` nor `az`, and only ambient auth does.",
+  "binaries": [
+    {
+      "provider": "git",
+      "check": "git",
+      "what": "repository boundary detection for the optional .devwork-mcp.json layer",
+      "install": "install git with your package manager",
+      "manager": "brew",
+      "required": false
+    },
+    {
+      "provider": "gh",
+      "check": "gh",
+      "what": "ambient GitHub login, used only when github.auth is \"ambient\"",
+      "install": "brew install gh && gh auth login",
+      "manager": "brew",
+      "required": false
+    },
+    {
+      "provider": "az",
+      "check": "az",
+      "what": "ambient Azure DevOps login, used only when ado.auth is \"ambient\"",
+      "install": "brew install azure-cli && az extension add --name azure-devops && az login --allow-no-subscriptions",
+      "manager": "brew",
+      "required": false
+    }
+  ]
+}

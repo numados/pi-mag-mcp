@@ -1,0 +1,33 @@
+{
+  "description": "Copy this to ~/.config/devwork-mcp/installations/<id>.json (mode 600), keep only the backends this repository uses, list every project/repository it may touch, and reference secrets as env:VARIABLE. A repository selects this profile; it never supplies endpoints, credentials or write policy.",
+  "installationId": "example-service",
+  "repositoryRoot": "~/work/example-service",
+  "defaultBackend": "github",
+  "github": {
+    "apiBase": "https://api.github.com",
+    "repositories": ["acme/example-service"],
+    "defaultRepo": "acme/example-service",
+    "token": "env:DEVWORK_GITHUB_TOKEN",
+    "auth": "token"
+  },
+  "jira": {
+    "domain": "https://your-company.atlassian.net",
+    "email": "you@example.com",
+    "token": "env:DEVWORK_JIRA_TOKEN",
+    "projects": ["ABC"],
+    "auth": "off"
+  },
+  "ado": {
+    "org": "https://dev.azure.com/your-org",
+    "project": "Your Project",
+    "projects": ["Your Project"],
+    "pat": "env:DEVWORK_ADO_PAT",
+    "auth": "off"
+  },
+  "write": {
+    "policy": "read-only",
+    "requirePreview": true
+  },
+  "cacheTtlSeconds": 60,
+  "top": 20
+}
