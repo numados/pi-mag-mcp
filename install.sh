@@ -25,6 +25,10 @@ REGISTER=true
 EXPOSURE=""
 ENV_PAIRS=()
 TARGET=""
+LOCAL=false
+SKIP_BUILD=false
+REPO_PATH=""
+INSTALLATION=""
 
 # --------------------------------------------------------------- server registry
 # One line per server: name|directory|description|timeout|toolExpose. The
@@ -40,6 +44,7 @@ REGISTRY=(
   "teams|teams-mcp|teams_message: one Teams channel message by share URL, browser token or Azure CLI fallback, structured failure causes|120|"
   "knowledge|knowledge-mcp|knowledge: Obsidian-style Markdown vault owner — one source may span several directories, qmd BM25→rg search, bounded read, link graph, two-phase validated writes with format/convention checks, plus the numados-task-* workspace protocol; status/doctor report readiness and setup creates the config|120|knowledge_status:direct,knowledge_search:direct,knowledge_read:direct,knowledge_task:direct"
   "search|search-mcp|search: local search router — text, files, structure, docs, semantic, machine and crossrepo over swappable providers (rg, fd, mdfind, ast-grep, rga, auggie, serena, zoekt) with ordered fallback, availability probing and a doctor report; hits are untrusted file content||search:direct,providers:direct"
+  "devwork|devwork-mcp|devwork: work items and pull requests across GitHub, Jira Cloud and Azure DevOps behind one routing table; one installation per repository binds credentials, scope and write policy, reads are direct and every write returns a preview first|120|devwork_status:direct,devwork_get:direct,devwork_query:direct"
 )
 
 server_field() { # server_field <name> <1|2|3|4|5>
@@ -69,12 +74,18 @@ usage() {
 Usage:
   ./install.sh list [--json]        readiness report, changes nothing
   ./install.sh <server> [options]   build and register one server
+  ./install.sh devwork --local --repo <path> --installation <id>
+                                    register devwork for one repository only
 
 Options:
   --dry-run             print what would happen; write nothing
   --no-pi               build and test only, skip Pi registration
   --exposure <mode>     codemode (default), deferred, direct or hidden
   --env <KEY=VALUE>     extra environment entry for the server (repeatable)
+  --local               project-scoped registration (devwork only)
+  --repo <path>         repository root for --local
+  --installation <id>   installation profile name for --local
+  --skip-build          reuse an existing dist/ instead of building (tests)
   -h, --help            this message
 
 Servers: see ./install.sh list
@@ -102,6 +113,14 @@ parse_args() {
         [ "$#" -ge 2 ] || die "--env needs KEY=VALUE"
         case "$2" in *=*) ENV_PAIRS+=("$2") ;; *) die "--env expects KEY=VALUE, got '$2'" ;; esac
         shift 2 ;;
+      --local) LOCAL=true; shift ;;
+      --skip-build) SKIP_BUILD=true; shift ;;
+      --repo)
+        [ "$#" -ge 2 ] || die "--repo needs a path"
+        REPO_PATH="$2"; shift 2 ;;
+      --installation)
+        [ "$#" -ge 2 ] || die "--installation needs an id"
+        INSTALLATION="$2"; shift 2 ;;
       -*) die "unknown option: $1 (see --help)" ;;
       *)
         [ -z "$TARGET" ] || die "only one server per run; got '$TARGET' and '$1'"
@@ -255,7 +274,14 @@ build_tool_exposure_json() { # build_tool_exposure_json <csv>
 }
 
 cmd_install() {
+  if [ "$LOCAL" = true ]; then cmd_install_local; return 0; fi
   require_known_server
+  # devwork serves one installation per repository. A user-level entry would
+  # have no installation and therefore no tools, so refuse instead of writing a
+  # misleading registration.
+  if [ "$TARGET" = "devwork" ] && [ "$REGISTER" = true ]; then
+    die "devwork is installation-scoped: run ./install.sh devwork --local --repo <repository root> --installation <id> (or add --no-pi to only build it)"
+  fi
   local dir desc timeout tool_expose package entry_path node_bin
   dir="$(server_field "$TARGET" 2)"
   desc="$(server_field "$TARGET" 3)"
@@ -319,6 +345,114 @@ cmd_install() {
 
   register "$TARGET" "$desc" "$node_bin" "$entry_path" "$timeout" "$tool_expose"
   print_setup_hint "$dir"
+}
+
+# ------------------------------------------------------------ local (devwork)
+# devwork serves one installation per repository: the profile carries endpoints,
+# scope and write policy, the repository only selects it. This mode therefore
+# writes <repo>/.pi/mcp.json and never touches the user-level file.
+cmd_install_local() {
+  [ "$TARGET" = "devwork" ] || die "--local is supported for devwork only (it is the installation-scoped server)"
+  [ -n "$REPO_PATH" ] || die "--local needs --repo <repository root>"
+  [ -n "$INSTALLATION" ] || die "--local needs --installation <id> (the profile name for this repository)"
+
+  local repo dir desc entry_path profile_dir profile node_bin
+  repo="$(cd "$REPO_PATH" 2>/dev/null && pwd -P)" || die "no such directory: $REPO_PATH"
+  dir="$(server_field devwork 2)" || die "devwork is missing from the registry"
+  desc="$(server_field devwork 3)"
+  entry_path="$ROOT/$dir/dist/server.js"
+  profile_dir="${XDG_CONFIG_HOME:-$HOME/.config}/devwork-mcp/installations"
+  profile="$profile_dir/$INSTALLATION.json"
+  node_bin="$(command -v node || true)"
+
+  step "local plan"
+  note "repository:   $repo"
+  note "server:       devwork ($dir)"
+  note "entry:        $entry_path"
+  note "profile:      $profile (mode 600, excluded from the repository)"
+  note "project file: $repo/.pi/mcp.json (a full entry; the user-level mcp.json is not touched)"
+  note "environment:  DEVWORK_INSTALLATION=$INSTALLATION"
+
+  if [ "$DRY_RUN" = true ]; then
+    step "dry run — nothing is built, tested or written"
+    [ "$SKIP_BUILD" = true ] && note "would reuse $entry_path (--skip-build)" || note "would run: npm ci && npm run build && npm test in $dir"
+    [ -f "$profile" ] && note "profile exists, would be left untouched" || note "would create the profile from installation.example.json"
+    note "would merge the devwork entry into $repo/.pi/mcp.json (backup first)"
+    return 0
+  fi
+
+  if [ "$SKIP_BUILD" != true ]; then
+    step "toolchain"
+    check_node "$dir"
+    step "install dependencies ($dir)"
+    ( cd "$ROOT/$dir" && npm ci --ignore-scripts )
+    step "build"
+    ( cd "$ROOT/$dir" && npm run build )
+    step "test"
+    ( cd "$ROOT/$dir" && npm test )
+  fi
+  [ -f "$entry_path" ] || die "missing $entry_path — build it first or drop --skip-build"
+  command -v jq >/dev/null 2>&1 || die "jq is required to write the profile and the registration safely (brew install jq)"
+
+  step "installation profile"
+  if [ -f "$profile" ]; then
+    local mode
+    mode="$(stat -f %Lp "$profile" 2>/dev/null || stat -c %a "$profile" 2>/dev/null || true)"
+    note "exists (left untouched): $profile"
+    # The profile is the credential boundary: the server refuses a group- or
+    # world-readable file, so say it here instead of at the first tool call.
+    case "$mode" in
+      ""|600|400) : ;;
+      *) note "WARNING: mode is $mode — the server refuses it; run: chmod 600 $profile" ;;
+    esac
+  else
+    mkdir -p "$profile_dir"
+    jq --arg id "$INSTALLATION" --arg root "$repo" \
+       '.installationId = $id | .repositoryRoot = $root' \
+       "$ROOT/$dir/installation.example.json" > "$profile" || die "could not write $profile"
+    chmod 600 "$profile"
+    note "written: $profile (mode 600)"
+    note "fill it in: endpoints, allowed projects/repositories, write policy, credential references"
+  fi
+
+  step "project registration ($repo/.pi/mcp.json)"
+  mkdir -p "$repo/.pi"
+  local target="$repo/.pi/mcp.json" backup tmp
+  if [ ! -f "$target" ]; then
+    printf '{\n  "mcpServers": {}\n}\n' > "$target"
+  fi
+  jq -e . "$target" >/dev/null 2>&1 || die "$target is not valid JSON; fix it before registering (no changes made)"
+  backup="$target.bak.$(date +%Y%m%d-%H%M%S)"
+  cp -p "$target" "$backup"
+  note "backup: $backup"
+
+  tmp="$(mktemp "$repo/.pi/.mcp.json.tmp.XXXXXX")"
+  if ! jq --arg cmd "$node_bin" --arg path "$entry_path" --arg id "$INSTALLATION" --arg desc "$desc" '
+        .mcpServers //= {} |
+        .mcpServers["devwork"] = {
+          command: $cmd,
+          args: [$path],
+          cwd: ".",
+          env: { DEVWORK_INSTALLATION: $id },
+          description: $desc,
+          exposure: "codemode",
+          timeout: 120,
+          toolExposure: { devwork_status: "direct", devwork_get: "direct", devwork_query: "direct" }
+        }
+      ' "$target" >"$tmp"; then
+    rm -f "$tmp"
+    die "could not merge the entry; $target is unchanged"
+  fi
+  chmod 600 "$tmp"
+  mv "$tmp" "$target"
+  jq -e --arg path "$entry_path" '.mcpServers.devwork.args[0] == $path and .mcpServers.devwork.command != null' "$target" >/dev/null 2>&1 \
+    || die "registration wrote an unexpected entry; restore $backup"
+  note "devwork: registered for $repo (project scope)"
+
+  step "done"
+  note "the repository is now bound to installation \"$INSTALLATION\""
+  note "set the variables the profile references, then run: pi mcp list"
+  note "a repository without this entry gets no devwork tools at all"
 }
 
 register() { # register <name> <description> <node-bin> <entry-path> <timeout> <tool-expose>

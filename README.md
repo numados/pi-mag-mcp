@@ -5,9 +5,10 @@ and registered in `~/.pi/agent/mcp.json`.
 
 ## Status
 
-In progress. Five of the nine servers are implemented and tested:
-`web-search-mcp/`, `office-mcp/`, `teams-mcp/`, `search-mcp/` and `knowledge-mcp/`. Design, source
-inventory and per-server research live in the local planning workspace
+In progress. Six of the nine servers are implemented and tested:
+`web-search-mcp/`, `office-mcp/`, `teams-mcp/`, `search-mcp/`, `knowledge-mcp/`
+and `devwork-mcp/`. Design, source inventory and per-server research live in the
+local planning workspace
 `.numados/tasks/` (not tracked by git — see `.git/info/exclude`).
 
 | Server | Tools | State |
@@ -17,6 +18,7 @@ inventory and per-server research live in the local planning workspace
 | `teams-mcp` | `teams_message` | implemented and tested; not registered on this machine |
 | `search-mcp` | `providers`, `search`, `search_{text,files,structure,docs,semantic,machine,crossrepo}` | implemented and tested; live registration still points at the old catalog |
 | `knowledge-mcp` | `knowledge_{status,search,read,links,structure,write,move,task,repo}` | implemented and tested; live registration still points at the old catalog; the machine's vault configuration still needs `--setup` |
+| `devwork-mcp` | `devwork_{status,get,query,create,update,repos}`, `devwork_pr_{show,list,create,update,vote}`, `devwork_task_{create,done}`, `devwork_pbi_status` | implemented and tested; registered per repository, never user-level |
 
 ## Installing a server
 
@@ -31,7 +33,15 @@ entry into Pi's configuration:
 ./install.sh teams                    # build, test, register the Teams server
 ./install.sh search                   # build, test, register the search router
 ./install.sh knowledge                # build, test, register the vault and task server
+./install.sh devwork --local --repo ~/work/example --installation example-service
+                                      # build, test, register for one repository only
 ```
+
+`devwork` is installation-scoped: `--local` writes a full entry into
+`<repo>/.pi/mcp.json` and a private profile under
+`~/.config/devwork-mcp/installations/`, and never touches the user-level file.
+See `devwork-mcp/README.md` for the four-layer model, scope enforcement and the
+preview binding on writes.
 
 A server name is required. Without one the script prints usage and exits 2, so
 a bare invocation cannot install whatever happens to be in the repository.
