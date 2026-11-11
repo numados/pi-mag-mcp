@@ -3,9 +3,9 @@
  * skills and agent instructions, so the wording is asserted, not just the throw.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { test } from "node:test";
 
 import { assertRoot, assertRoots, clipLimit, clipSnippet, truncate } from "../dist/scope.js";
@@ -38,8 +38,19 @@ test("hidden paths are rejected unless a configured root covers them", () => {
 });
 
 test("a root outside the configured allowlist is rejected", () => {
-  const allowlisted = { roots: ["/Users/someone/Personal"], providers: {} };
-  assert.throws(() => assertRoot(allowlisted, "/Users/someone/Other"), /root outside configured allowed roots/);
+  // Real absolute paths from the machine's temp dir: no home directory of a
+  // real person belongs in a fixture, and an allowlist call needs absolute paths.
+  const base = mkdtempSync(join(tmpdir(), "search-mcp-scope-"));
+  try {
+    const allowedRoot = join(base, "allowed");
+    const outsideRoot = join(base, "outside");
+    mkdirSync(allowedRoot, { recursive: true });
+    mkdirSync(outsideRoot, { recursive: true });
+    const allowlisted = { roots: [allowedRoot], providers: {} };
+    assert.throws(() => assertRoot(allowlisted, outsideRoot), /root outside configured allowed roots/);
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
 });
 
 test("assertRoots rejects an empty list and names the offending root", () => {

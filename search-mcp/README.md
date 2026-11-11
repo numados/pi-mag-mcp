@@ -55,8 +55,8 @@ Layers, highest priority first:
 
 ```json
 {
-  "roots": ["/Users/you/Personal"],
-  "crossrepoRoots": ["/Users/you/Personal"],
+  "roots": ["~/Personal"],
+  "crossrepoRoots": ["~/Personal"],
   "providers": {
     "zoekt": { "enabled": false, "url": "http://localhost:6070" },
     "auggie": { "enabled": false }
@@ -124,7 +124,7 @@ entry; timeout, `enabled` and other tools' exposure survive a re-run.
 Per-repository override (optional, keeps the machine config out of it):
 
 ```json
-{ "roots": ["/Users/you/Personal/numados"], "providers": { "zoekt": { "enabled": false } } }
+{ "roots": ["~/Personal/numados"], "providers": { "zoekt": { "enabled": false } } }
 ```
 
 Save as `.search-mcp.json` in the repository root.

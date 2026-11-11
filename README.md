@@ -56,3 +56,19 @@ configuration file.
 
 Set `PI_MCP_JSON` to point the script at another file, which is useful for
 trying a registration before touching the real one.
+
+## Content hygiene
+
+Code, tests, docs, fixtures and commit messages are published with the package,
+so they must not carry machine- or tenant-specific data: no absolute home paths,
+no customer or product names, no real ticket prefixes or note titles. Use neutral
+placeholders (`~/vaults/work`, `example-vault`, `ABC-123`). Both checks are quick
+and belong before a commit:
+
+```bash
+scripts/check-content.sh            # tracked files
+scripts/check-content.sh --history  # plus every commit message
+```
+
+The name denylist stays machine-local (`~/.pi/agent/content-denylist.txt`) and is
+never committed. See `CONTRIBUTING.md` for the full rule and the package conventions.
