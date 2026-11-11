@@ -1,0 +1,13 @@
+{
+  "$comment": "Machine requirements for repo-mcp. Single owner of this table: src/server.ts renders it for repo_status and --doctor, and ../install.sh reads the same file with jq for `list`. Nothing here installs anything. `gh` is deliberately NOT listed: repo_status reports its presence for the future GitHub integration but no repo-mcp tool uses it today.",
+  "binaries": [
+    {
+      "provider": "git",
+      "check": "git",
+      "what": "the git CLI every tool runs through (shell:false, fixed argv templates)",
+      "install": "brew install git  # or on macOS: xcode-select --install",
+      "manager": "brew",
+      "required": true
+    }
+  ]
+}

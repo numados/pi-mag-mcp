@@ -5,9 +5,9 @@ and registered in `~/.pi/agent/mcp.json`.
 
 ## Status
 
-In progress. Six of the nine servers are implemented and tested:
-`web-search-mcp/`, `office-mcp/`, `teams-mcp/`, `search-mcp/`, `knowledge-mcp/`
-and `devwork-mcp/`. Design, source inventory and per-server research live in the
+In progress. Seven of the nine servers are implemented and tested:
+`web-search-mcp/`, `office-mcp/`, `teams-mcp/`, `search-mcp/`, `knowledge-mcp/`,
+`devwork-mcp/` and `repo-mcp/`. Design, source inventory and per-server research live in the
 local planning workspace
 `.numados/tasks/` (not tracked by git — see `.git/info/exclude`).
 
@@ -19,6 +19,7 @@ local planning workspace
 | `search-mcp` | `providers`, `search`, `search_{text,files,structure,docs,semantic,machine,crossrepo}` | implemented and tested; live registration still points at the old catalog |
 | `knowledge-mcp` | `knowledge_{status,search,read,links,structure,write,move,task,repo}` | implemented and tested; live registration still points at the old catalog; the machine's vault configuration still needs `--setup` |
 | `devwork-mcp` | `devwork_{status,get,query,create,update,repos}`, `devwork_pr_{show,list,create,update,vote}`, `devwork_task_{create,done}`, `devwork_pbi_status` | implemented and tested; registered per repository, never user-level |
+| `repo-mcp` | 21 Git tools: reads, fetch/pull/staged commit, approval-gated local mutations and branch/message generation | implemented and tested; live registration still points at the old catalog |
 
 ## Installing a server
 
@@ -33,6 +34,7 @@ entry into Pi's configuration:
 ./install.sh teams                    # build, test, register the Teams server
 ./install.sh search                   # build, test, register the search router
 ./install.sh knowledge                # build, test, register the vault and task server
+./install.sh repo                     # build, test, register the Git server
 ./install.sh devwork --local --repo ~/work/example --installation example-service
                                       # build, test, register for one repository only
 ```
