@@ -14,7 +14,7 @@
 
 import { readFileSync } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/server";
-import type { ServerContext } from "@modelcontextprotocol/server";
+import type { CallToolResult, ServerContext } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { TOOLS, envelopeSchema } from "./contract.js";
 import { dispatch } from "./tools.js";
@@ -46,7 +46,20 @@ function createServer(): McpServer {
         inputSchema: tool.inputSchema,
         outputSchema: envelopeSchema,
       },
-      (args: unknown, ctx: ServerContext) => dispatch(tool.name, (args ?? {}) as Record<string, unknown>, ctx.mcpReq.signal),
+      async (args: unknown, ctx: ServerContext): Promise<CallToolResult> => {
+        // Handler exceptions stay named: the source entry returned
+        // "<tool> failed: <reason>" and the model debugging a malformed
+        // config still needs to know which tool failed.
+        try {
+          const r = await dispatch(tool.name, (args ?? {}) as Record<string, unknown>, ctx.mcpReq.signal);
+          return r as CallToolResult;
+        } catch (e) {
+          return {
+            content: [{ type: "text", text: `${tool.name} failed: ${e instanceof Error ? e.message : String(e)}` }],
+            isError: true,
+          };
+        }
+      },
     );
   }
   return server;

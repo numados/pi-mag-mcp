@@ -141,3 +141,33 @@ test("stdio server over the Pi client: list, fake agent_call, doctor, contract e
   assert.equal(mistyped.isError, true);
   assert.match(mistyped.content[0].text, /invalid arguments|mode/);
 });
+
+test("a handler exception stays a named isError result (malformed config)", async (t) => {
+  const pi = await loadPiClient();
+  if (!pi) {
+    t.skip("Pi MCP client not found; set PI_MCP_ROOT to run the compatibility smoke test");
+    return;
+  }
+
+  const badConfig = path.join(fixtureRoot, "broken-config.json");
+  writeFileSync(badConfig, "{ not json");
+
+  const { McpClient, StdioTransport } = pi;
+  const transport = new StdioTransport({
+    command: process.execPath,
+    args: [serverEntry],
+    inheritEnv: false,
+    env: { ...serverEnv, AGENTS_MCP_CONFIG: badConfig },
+    cwd: fixtureRoot,
+    stderr: "pipe",
+  });
+  const client = new McpClient({ name: "agents-mcp-smoke-bad-config", version: "0.0.0" });
+  await client.connect(transport);
+  t.after(async () => {
+    await client.close();
+  });
+
+  const res = await client.callTool("agents_status", {});
+  assert.equal(res.isError, true);
+  assert.match(res.content[0].text, /^agents_status failed: malformed config/);
+});
