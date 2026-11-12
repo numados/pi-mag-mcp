@@ -26,6 +26,8 @@ import {
   type PdfOperation,
   type PdfSortOrder,
 } from "./contract.js";
+import { toolchainInstallHint } from "./requirements.js";
+import { missingToolsFor, missingToolsNote, toolPaths, type Operation, type ToolName, type ToolPaths } from "./toolchain.js";
 import { runCommand, SubprocessError, sanitizedEnv } from "./subprocess.js";
 
 const IMAGE_EXTENSIONS = new Set([
@@ -40,8 +42,6 @@ const IMAGE_EXTENSIONS = new Set([
   ".bmp",
   ".gif",
 ]);
-
-const INSTALL_HINT = "brew install imagemagick ghostscript ocrmypdf poppler";
 
 function normalizePath(input: string, cwd: string): string {
   return resolve(cwd, input.replace(/^@/, ""));
@@ -104,73 +104,10 @@ async function withPdfSlot<T>(busy: T, work: () => Promise<T>): Promise<T> {
 }
 
 // ------------------------------------------------------- tool discovery
-
-interface ToolPaths {
-  magick: string | null;
-  gs: string | null;
-  ocrmypdf: string | null;
-  pdfinfo: string | null;
-  pdffonts: string | null;
-}
-
-const tools: ToolPaths = { magick: null, gs: null, ocrmypdf: null, pdfinfo: null, pdffonts: null };
-let toolsDetected = false;
-
-async function findTool(name: string): Promise<string | null> {
-  const flag = name === "pdfinfo" || name === "pdffonts" ? "-v" : name === "magick" || name === "gs" ? "-version" : "--version";
-  for (const candidate of [name, `/opt/homebrew/bin/${name}`, `/usr/local/bin/${name}`]) {
-    try {
-      await runCommand(candidate, [flag], { timeoutMs: 5_000, env: sanitizedEnv(), maxOutputBytes: 65_536 });
-      return candidate;
-    } catch (error) {
-      // Not on PATH at this location: try the next one. Any other failure means
-      // the binary exists but its version probe exited oddly, so it is usable.
-      if (error instanceof SubprocessError && error.kind === "not-found") continue;
-      return candidate;
-    }
-  }
-  return null;
-}
-
-async function detectTools(): Promise<void> {
-  if (toolsDetected) return;
-  const [magick, gs, ocrmypdf, pdfinfo, pdffonts] = await Promise.all([
-    findTool("magick"),
-    findTool("gs"),
-    findTool("ocrmypdf"),
-    findTool("pdfinfo"),
-    findTool("pdffonts"),
-  ]);
-  Object.assign(tools, { magick, gs, ocrmypdf, pdfinfo, pdffonts });
-  toolsDetected = true;
-}
-
-function missingFor(operation: PdfOperation): string[] {
-  const missing: string[] = [];
-  const require = (path: string | null, name: string): void => {
-    if (!path) missing.push(name);
-  };
-  switch (operation) {
-    case "grayscale":
-    case "optimize":
-      require(tools.gs, "ghostscript");
-      break;
-    case "bw":
-      require(tools.magick, "imagemagick");
-      require(tools.gs, "ghostscript");
-      break;
-    case "clean-scan":
-    case "ocr":
-      require(tools.ocrmypdf, "ocrmypdf");
-      break;
-    case "info":
-    case "auto":
-      require(tools.pdfinfo, "poppler");
-      require(tools.pdffonts, "poppler");
-      break;
-  }
-  return missing;
-}
+// Binary names, version flags, fallback locations, the operation -> tools
+// mapping and the missing-tools notes are owned by ./toolchain.ts, which the
+// --doctor report shares; the install hints come from requirements.json via
+// ./requirements.ts. This module only asks for the resolved paths.
 
 // ------------------------------------------------------------- create_pdf
 
@@ -322,9 +259,9 @@ export async function createPdf(input: CreatePdfInput, signal?: AbortSignal): Pr
 
   const busy = createPdfOutput({ ...base, reason: "busy", notes: [`${LIMITS.maxConcurrentPdfJobs} PDF jobs are already running; retry when one finishes.`] });
   return withPdfSlot(busy, async () => {
-    await detectTools();
-    if (!tools.magick) {
-      return createPdfOutput({ ...base, reason: "missing-tools", notes: [`ImageMagick is required: ${INSTALL_HINT}.`] });
+    const paths = await toolPaths();
+    if (!paths.magick) {
+      return createPdfOutput({ ...base, reason: "missing-tools", notes: [`ImageMagick is required: ${toolchainInstallHint()}.`] });
     }
 
     const ordered = sortImages(collected.files, input.sortBy);
@@ -345,7 +282,7 @@ export async function createPdf(input: CreatePdfInput, signal?: AbortSignal): Pr
     args.push("-quality", String(input.quality), "-compress", "JPEG", temp);
 
     try {
-      await runCommand(tools.magick, args, {
+      await runCommand(paths.magick, args, {
         timeoutMs: LIMITS.pdfCreateTimeoutMs,
         env: sanitizedEnv(),
         ...(signal ? { signal } : {}),
@@ -394,14 +331,14 @@ interface Inspection {
   notes: string[];
 }
 
-async function inspectPdf(input: string, signal?: AbortSignal): Promise<Inspection> {
+async function inspectPdf(paths: ToolPaths, input: string, signal?: AbortSignal): Promise<Inspection> {
   const notes: string[] = [];
   let pages: number | null = null;
   let hasFonts: boolean | null = null;
 
-  if (tools.pdfinfo) {
+  if (paths.pdfinfo) {
     try {
-      const { stdout } = await runCommand(tools.pdfinfo, [input], {
+      const { stdout } = await runCommand(paths.pdfinfo, [input], {
         timeoutMs: 30_000,
         env: sanitizedEnv(),
         ...(signal ? { signal } : {}),
@@ -416,9 +353,9 @@ async function inspectPdf(input: string, signal?: AbortSignal): Promise<Inspecti
     notes.push("pdfinfo is missing (poppler).");
   }
 
-  if (tools.pdffonts) {
+  if (paths.pdffonts) {
     try {
-      const { stdout } = await runCommand(tools.pdffonts, [input], {
+      const { stdout } = await runCommand(paths.pdffonts, [input], {
         timeoutMs: 30_000,
         env: sanitizedEnv(),
         ...(signal ? { signal } : {}),
@@ -464,7 +401,7 @@ function subprocessFailure(error: unknown): { reason: FailureKind; note: string 
   if (error instanceof SubprocessError) {
     switch (error.kind) {
       case "not-found":
-        return { reason: "missing-tools", note: `${error.message}. Install with: ${INSTALL_HINT}.` };
+        return { reason: "missing-tools", note: `${error.message}. Install with: ${toolchainInstallHint()}.` };
       case "timeout":
         return { reason: "timeout", note: `The local tool timed out: ${error.message}.` };
       case "cancelled":
@@ -478,11 +415,11 @@ function subprocessFailure(error: unknown): { reason: FailureKind; note: string 
   return { reason: "unknown", note: describe(error) };
 }
 
-function commandFor(operation: PdfOperation, input: PdfCleanInput): { command: string; args: string[]; backend: string } {
+function commandFor(operation: PdfOperation, input: PdfCleanInput, paths: ToolPaths): { command: string; args: string[]; backend: string } {
   switch (operation) {
     case "grayscale":
       return {
-        command: tools.gs!,
+        command: paths.gs!,
         backend: "ghostscript → grayscale",
         args: [
           "-sDEVICE=pdfwrite",
@@ -498,7 +435,7 @@ function commandFor(operation: PdfOperation, input: PdfCleanInput): { command: s
       };
     case "bw":
       return {
-        command: tools.magick!,
+        command: paths.magick!,
         backend: `imagemagick → 1-bit B&W (${input.dpi}dpi, threshold ${input.threshold}%)`,
         args: [
           "-density",
@@ -522,19 +459,19 @@ function commandFor(operation: PdfOperation, input: PdfCleanInput): { command: s
       };
     case "clean-scan":
       return {
-        command: tools.ocrmypdf!,
+        command: paths.ocrmypdf!,
         backend: `ocrmypdf → clean-scan (lang=${input.language})`,
         args: ["--clean", "--deskew", "--optimize", "1", "--skip-text", "-l", input.language, "{input}", "{output}"],
       };
     case "ocr":
       return {
-        command: tools.ocrmypdf!,
+        command: paths.ocrmypdf!,
         backend: `ocrmypdf → OCR text layer (lang=${input.language})`,
         args: ["--skip-text", "--optimize", "0", "-l", input.language, "{input}", "{output}"],
       };
     case "optimize":
       return {
-        command: tools.gs!,
+        command: paths.gs!,
         backend: "ghostscript → /ebook compression",
         args: [
           "-sDEVICE=pdfwrite",
@@ -564,8 +501,8 @@ export function substituteArgs(args: string[], input: string, output: string): s
   return args.map((arg) => arg.replaceAll("{input}", input).replaceAll("{output}", output));
 }
 
-function inspectFailure(operation: PdfOperation, note: string): { reason: FailureKind; note: string } {
-  return { reason: "missing-tools", note: `Missing ${note} for '${operation}'. Install with: ${INSTALL_HINT}.` };
+function inspectFailure(operation: Operation, missing: readonly ToolName[]): { reason: FailureKind; note: string } {
+  return { reason: "missing-tools", note: missingToolsNote(operation, missing) };
 }
 
 /**
@@ -618,18 +555,18 @@ export async function pdfClean(input: PdfCleanInput, signal?: AbortSignal): Prom
 
   const busy = pdfCleanOutput({ ...base, reason: "busy", notes: [`${LIMITS.maxConcurrentPdfJobs} PDF jobs are already running; retry when one finishes.`] });
   return withPdfSlot(busy, async () => {
-    await detectTools();
+    const paths = await toolPaths();
 
     let operation: PdfOperation = input.operation;
     let inspection: Inspection | null = null;
 
     if (operation === "info" || operation === "auto") {
-      const missing = missingFor(operation);
+      const missing = missingToolsFor(operation, paths);
       if (missing.length > 0) {
-        const failure = inspectFailure(operation, missing.join(", "));
+        const failure = inspectFailure(operation, missing);
         return pdfCleanOutput({ ...base, reason: failure.reason, notes: [failure.note] });
       }
-      inspection = await inspectPdf(source, signal);
+      inspection = await inspectPdf(paths, source, signal);
       if (!inspection.ok) {
         // Guessing here would silently pick the wrong cleanup for a scan.
         return pdfCleanOutput({
@@ -658,9 +595,9 @@ export async function pdfClean(input: PdfCleanInput, signal?: AbortSignal): Prom
       operation = inspection.hasFonts ? "grayscale" : "clean-scan";
     }
 
-    const missing = missingFor(operation);
+    const missing = missingToolsFor(operation, paths);
     if (missing.length > 0) {
-      const failure = inspectFailure(operation, missing.join(", "));
+      const failure = inspectFailure(operation, missing);
       return pdfCleanOutput({ ...base, resolvedOperation: operation, reason: failure.reason, notes: [failure.note] });
     }
 
@@ -673,7 +610,7 @@ export async function pdfClean(input: PdfCleanInput, signal?: AbortSignal): Prom
     const temp = temporaryPath(output);
     let command: { command: string; args: string[]; backend: string };
     try {
-      command = commandFor(operation, input);
+      command = commandFor(operation, input, paths);
     } catch (error) {
       return pdfCleanOutput({ ...base, resolvedOperation: operation, reason: "unsupported", notes: [describe(error)] });
     }

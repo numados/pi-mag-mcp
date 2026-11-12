@@ -58,12 +58,19 @@ expansion is capped at 500 pages per job.
 brew install imagemagick ghostscript ocrmypdf poppler
 ```
 
+The declared table is `requirements.json` — one owner for the binary names, the
+per-tool install commands and which tools are required. The `--doctor` report
+(below) and the runtime's missing-tools notes both read it, and
+`install.sh list` runs the same doctor, so nothing can advertise a different
+command.
+
 Each operation reports its own missing dependency with the install command
 instead of failing mid-run:
 
 | Operation | Requires |
 | --- | --- |
-| `create_pdf`, `bw` | ImageMagick (+ ghostscript for the PDF delegate) |
+| `create_pdf` | ImageMagick |
+| `bw` | ImageMagick and ghostscript |
 | `grayscale`, `optimize` | ghostscript |
 | `clean-scan`, `ocr` | OCRmyPDF |
 | `info`, `auto` | poppler (`pdfinfo`, `pdffonts`) |
@@ -76,6 +83,26 @@ returns `unavailable` rather than applying a cleanup to the wrong document type.
 
 Relative paths resolve against the server process cwd, which Pi sets to the
 session directory.
+
+## Doctor
+
+```bash
+node dist/server.js --doctor
+```
+
+Prints a readiness report — which tools are present (with the resolved
+command), which operations the present tools support, and the exact install
+command for anything missing — and exits:
+
+- `0` when every required tool (imagemagick, ghostscript) is present. Optional
+  tools may still be missing; the report then names the blocked operations
+  (partial readiness), because each tool declares what it unlocks.
+- `1` when a required tool is missing, so a bootstrap script can gate on it.
+
+The doctor only runs each binary's version flag — it never executes a PDF
+mutation — and it reads no stdin, so it always exits promptly instead of
+waiting on a transport. The MCP tool list the host sees stays fixed whatever
+the report says.
 
 ## Limits
 
@@ -137,8 +164,13 @@ process may.
 ## Tests
 
 ```bash
-npm test           # build + contract, subprocess, PDF and Pi-client tests
+npm test           # build + contract, subprocess, PDF, doctor and Pi-client tests
 ```
+
+The doctor tests are hermetic: discovery is injected, or faked with executables
+created in the OS temp directory (which log any non-version invocation, proving
+the doctor never mutates a document); the CLI tests spawn
+`node dist/server.js --doctor` directly, independent of the optional Pi client.
 
 The Pi-client test drives the real `McpClient` from the installed Pi over stdio:
 two advertised tools, argument rejection, a structured `not-found` and an
@@ -154,10 +186,15 @@ absent.
 - `src/contract.ts` is the only owner of schemas, limits, enums and the failure
   vocabulary; the advertised schemas, runtime validation and output schemas all
   derive from it.
+- `requirements.json` (loaded through `src/requirements.ts`) owns the toolchain
+  facts: tool names, install commands, required flags. `src/toolchain.ts` owns
+  discovery (version flags, PATH + Homebrew fallback prefixes) and the
+  operation → tools mapping — shared by the PDF runtime and the doctor, so
+  binary names, flags and mappings are never restated.
 - `src/subprocess.ts` owns argv-only execution, the child environment allowlist,
   output caps and process-group termination.
 - `src/pdf.ts` owns both tools and the publish rules; `src/render.ts` is the only
-  text projection.
+  text projection; `src/doctor.ts` owns the readiness verdicts and the exit rule.
 - `src/server.ts` registers the tools with `McpServer`/`serveStdio`, validates
   each output against its own schema before sending it, and keeps stdout
-  protocol-only.
+  protocol-only; `--doctor` runs before the transport starts.

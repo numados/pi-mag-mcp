@@ -1,0 +1,40 @@
+{
+  "$comment": "Machine requirements for office-mcp. Single owner of the toolchain facts: src/requirements.ts loads this table for the doctor report and for the missing-tools notes the tools return, and ../install.sh reads the same file with jq for `list`. Nothing here installs anything. `tool` is the binary the server runs and the name looked up on PATH; `manager install package` is the exact command for one tool; `what` names the operations the tool unlocks (the operation mapping itself lives in src/toolchain.ts, shared with the PDF runtime); `required` marks the tools the core operations (create_pdf, grayscale, optimize, bw) cannot run without — the rest only limit which operations are available.",
+  "binaries": [
+    {
+      "tool": "magick",
+      "what": "ImageMagick — create_pdf image decoding and PDF writing, and the bw raster path",
+      "package": "imagemagick",
+      "manager": "brew",
+      "required": true
+    },
+    {
+      "tool": "gs",
+      "what": "ghostscript — grayscale and optimize, and PDF rasterization for bw",
+      "package": "ghostscript",
+      "manager": "brew",
+      "required": true
+    },
+    {
+      "tool": "ocrmypdf",
+      "what": "OCRmyPDF — ocr and clean-scan",
+      "package": "ocrmypdf",
+      "manager": "brew",
+      "required": false
+    },
+    {
+      "tool": "pdfinfo",
+      "what": "poppler pdfinfo — info and auto page-count inspection",
+      "package": "poppler",
+      "manager": "brew",
+      "required": false
+    },
+    {
+      "tool": "pdffonts",
+      "what": "poppler pdffonts — info and auto embedded-font inspection",
+      "package": "poppler",
+      "manager": "brew",
+      "required": false
+    }
+  ]
+}

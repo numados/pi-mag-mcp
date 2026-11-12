@@ -3,6 +3,12 @@
  *   create_pdf — compressed PDF from images via ImageMagick.
  *   pdf_clean — ghostscript / ImageMagick / OCRmyPDF / poppler router.
  *
+ * `node dist/server.js --doctor` prints the readiness report (tool presence,
+ * which operations the present tools support) and exits 1 when a required
+ * tool is missing — the same convention install.sh `list` relies on. It runs
+ * version flags only, never a PDF mutation, and reads no stdin, so it cannot
+ * hang; the tool list the MCP host sees stays fixed regardless of the result.
+ *
  * stdout is the protocol channel: nothing but MCP frames may be written there.
  * Diagnostics go to stderr and never include caller paths or document content.
  */
@@ -14,6 +20,7 @@ import {
   pdfCleanInputSchema,
   pdfCleanOutputSchema,
 } from "./contract.js";
+import { buildDoctorReport, renderDoctorReport } from "./doctor.js";
 import { createPdf, pdfClean } from "./pdf.js";
 import { isErrorResult, renderCreatePdf, renderPdfClean } from "./render.js";
 import type { ZodType } from "zod";
@@ -48,7 +55,13 @@ function respond<T>(
   };
 }
 
-serveStdio(() => {
+async function runDoctorCli(): Promise<number> {
+  const report = await buildDoctorReport();
+  process.stdout.write(`${renderDoctorReport(report)}\n`);
+  return report.ok ? 0 : 1;
+}
+
+function createServer(): McpServer {
   const server = new McpServer(
     { name: "office", version: "0.1.0" },
     {
@@ -98,4 +111,18 @@ serveStdio(() => {
   );
 
   return server;
+}
+
+async function main(): Promise<void> {
+  if (process.argv.includes("--doctor")) {
+    // exitCode (not exit) so the report is flushed before the process ends.
+    process.exitCode = await runDoctorCli();
+    return;
+  }
+  serveStdio(createServer);
+}
+
+main().catch((error) => {
+  log(`fatal: ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
 });
