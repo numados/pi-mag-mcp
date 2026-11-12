@@ -55,6 +55,17 @@ export function buildDoctorReport(requirements: Requirement[], deps: DoctorDeps)
   return requirements.map((requirement) => judgeRequirement(requirement, deps));
 }
 
+/**
+ * Readiness rule (the `--doctor` exit code): only an **enabled, required**
+ * requirement can fail the run. Disabling a provider is the documented
+ * remediation `blocked` recommends, so a requirement the config already turned
+ * off — required or not — is an intentional state, never a broken machine;
+ * the report still lists it with the line that re-enables it.
+ */
+export function readinessFailed(report: RequirementReport[]): boolean {
+  return report.some((entry) => entry.required && entry.verdict !== "present" && entry.verdict !== "disabled");
+}
+
 /** The exact config line that turns one provider off. */
 export function disableHint(provider: string): string {
   return JSON.stringify({ providers: { [provider]: { enabled: false } } });

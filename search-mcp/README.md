@@ -91,7 +91,8 @@ and a difference falls through to ast-grep/rg instead of failing the tool.
 
 `providers {action:"doctor"}` answers, per requirement, one of:
 
-- `present` — the binary is on PATH;
+- `present` — the binary is on PATH (fd also counts its vendored
+  `~/.pi/agent/bin/fd` copy, exactly as the provider resolves it);
 - `installable` — missing, but this machine can install it: prints the exact
   command and what it unlocks;
 - `blocked` — missing and **not installable here** (no `brew`/`go`): prints the
@@ -106,9 +107,12 @@ The same report is available without a client:
 npm run doctor          # node dist/server.js --doctor
 ```
 
-It prints to stdout and exits 1 when a **required** binary (rg, fd, ast-grep, rga)
-is missing, so a bootstrap script can gate on it. Nothing is ever installed, and
-the server never writes the config: disabling a provider stays an explicit edit.
+It prints to stdout and exits 1 only when an **enabled, required** binary
+(rg, fd, ast-grep, rga) is missing, so a bootstrap script can gate on it. A
+provider the config disabled never fails readiness — turning it off is the
+remediation the report itself recommends, so following that advice must not
+keep the exit code red. Nothing is ever installed, and the server never writes
+the config: disabling a provider stays an explicit edit.
 
 ## Install
 

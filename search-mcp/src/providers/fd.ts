@@ -1,20 +1,21 @@
 /**
- * fd provider: fast filename search. Resolves the Pi-vendored copy
- * (`~/.pi/agent/bin/fd`) when fd is not on PATH, which is the normal case on
- * a machine bootstrapped by Pi rather than by brew.
+ * fd provider: fast filename search. The candidate list (PATH fd, then the
+ * Pi-vendored `~/.pi/agent/bin/fd` copy — the normal case on a machine
+ * bootstrapped by Pi rather than by brew) is owned by ../candidates.ts, which
+ * the doctor shares, so the provider and the report cannot drift.
  */
 
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { candidateCommands } from "../candidates.js";
 import { run } from "../subprocess.js";
 import { probeResult, type ProviderDef, type SearchHit, type SearchQuery } from "../types.js";
 
-const CANDIDATES = ["fd", join(homedir(), ".pi", "agent", "bin", "fd")];
 let resolved: string | null = null;
 
+/** Each candidate is verified by running it, in order: a PATH fd that exists
+ *  but fails `--version` falls through to the vendored copy, not to failure. */
 async function resolveFd(): Promise<string | null> {
   if (resolved) return resolved;
-  for (const candidate of CANDIDATES) {
+  for (const candidate of candidateCommands("fd")) {
     const result = await run(candidate, ["--version"], { timeoutMs: 5_000 });
     if (result.code === 0) {
       resolved = candidate;

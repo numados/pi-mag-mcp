@@ -64,7 +64,8 @@ export const providerStatusSchema = z.object({
  * - `blocked`     — missing and not installable here, so the provider should be
  *                   disabled in config rather than left half-working;
  * - `builtin`     — missing and there is nothing to install (e.g. Spotlight);
- *                   also the answer for a provider the config already disabled.
+ *                   `disabled` is its own verdict: the config turned the
+ *                   provider off, and that never fails readiness.
  */
 export const VERDICTS = ["present", "installable", "blocked", "builtin", "disabled"] as const;
 export type Verdict = (typeof VERDICTS)[number];

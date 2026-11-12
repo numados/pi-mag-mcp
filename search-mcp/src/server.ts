@@ -8,18 +8,20 @@
  * skipped (see `providers` and `requirements.json`).
  *
  * `node dist/server.js --doctor` prints the machine report and exits without
- * starting stdio (exit 1 when a required binary is missing).
+ * starting stdio (exit 1 only when an enabled, required binary is missing — a
+ * provider the config disabled never fails readiness).
  */
 
 import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { TOOLS, searchResponseSchema, type RequirementReport, type ToolSpec } from "./contract.js";
 import { loadConfig, watchConfig } from "./config.js";
-import { buildDoctorReport } from "./doctor.js";
+import { buildDoctorReport, readinessFailed } from "./doctor.js";
 import type { Requirement } from "./requirements.js";
 import { loadRequirements } from "./requirements.js";
 import { formatDoctor, formatResponse, formatStatus } from "./render.js";
 import { Router, type RawParams } from "./registry.js";
+import { resolveCandidate } from "./candidates.js";
 import { findOnPath } from "./subprocess.js";
 import { INTENTS, type Intent } from "./types.js";
 
@@ -49,10 +51,14 @@ function failure(value: string): ToolResult {
   return { ...text(value), isError: true };
 }
 
-/** Doctor dependencies: PATH lookups only, so nothing is spawned just to report. */
+/**
+ * Doctor dependencies: executable checks over each binary's candidate list
+ * (candidates.ts owns the list — fd also counts its vendored copy), so nothing
+ * is spawned just to produce a report.
+ */
 function doctorDeps(router: Router) {
   return {
-    hasBinary: (command: string) => findOnPath(command) !== null,
+    hasBinary: (command: string) => resolveCandidate(command) !== null,
     hasManager: (manager: string) => findOnPath(manager) !== null,
     isEnabled: (provider: string) => router.isEnabled(provider),
   };
@@ -169,8 +175,7 @@ async function runDoctorCli(): Promise<number> {
   try {
     const report = buildDoctorReport(loadRequirements(), doctorDeps(router));
     process.stdout.write(`${formatDoctor(report, loaded.sources, process.version)}\n`);
-    const missingRequired = report.some((entry) => entry.required && entry.verdict !== "present");
-    return missingRequired ? 1 : 0;
+    return readinessFailed(report) ? 1 : 0;
   } finally {
     router.shutdown();
   }
@@ -191,7 +196,8 @@ process.on("SIGINT", () => {
 
 async function main(): Promise<void> {
   if (process.argv.includes("--doctor")) {
-    process.exit(await runDoctorCli());
+    process.exitCode = await runDoctorCli();
+    return;
   }
   serveStdio(() => createServer(), {
     onerror: (error) => log(`transport error: ${error.message}`),
