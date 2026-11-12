@@ -16,6 +16,11 @@
       "name": "GRAFANA_DATASOURCE_TYPE",
       "what": "overrides the Grafana datasource type plugin id; defaults to quickwit-quickwit-datasource",
       "required": false
+    },
+    {
+      "name": "GRAFANA_API_TOKEN",
+      "what": "optional Grafana service-account token or legacy API key, sent as a Bearer header; requires HTTPS and a valid bearer-token format",
+      "required": false
     }
   ]
 }

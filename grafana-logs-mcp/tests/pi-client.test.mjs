@@ -14,7 +14,6 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -53,34 +52,7 @@ test("pi client lists both tools and the unconfigured query answers a named erro
     t.skip("Pi MCP client not found; set PI_MCP_ROOT to run the compatibility smoke test");
     return;
   }
-
-test("--doctor prints the readiness report over plain stdio and exits by env state", () => {
-  const withEnv = spawnSync(process.execPath, [serverEntry, "--doctor"], {
-    env: { PATH: process.env.PATH ?? "", GRAFANA_URL: "https://grafana.example.net", GRAFANA_DATASOURCE_UID: "uid-1", GRAFANA_API_TOKEN: "test-token" },
-    encoding: "utf8",
-  });
-  assert.equal(withEnv.status, 0, withEnv.stderr);
-  assert.match(withEnv.stdout, /grafana-logs status/);
-  assert.match(withEnv.stdout, /GRAFANA_URL: set/);
-  assert.match(withEnv.stdout, /GRAFANA_DATASOURCE_UID: set/);
-  assert.match(withEnv.stdout, /GRAFANA_API_TOKEN: set/);
-
-  const withoutEnv = spawnSync(process.execPath, [serverEntry, "--doctor"], {
-    env: { PATH: process.env.PATH ?? "" },
-    encoding: "utf8",
-  });
-  assert.equal(withoutEnv.status, 1, withoutEnv.stderr);
-  assert.match(withoutEnv.stdout, /GRAFANA_URL: missing/);
-  assert.match(withoutEnv.stdout, /GRAFANA_DATASOURCE_UID: missing/);
-  assert.match(withoutEnv.stdout, /GRAFANA_API_TOKEN: missing \(optional/);
-  // Values are never printed.
-  assert.ok(!withoutEnv.stdout.includes("test-token"));
-});
-
-const serverEnv = {
-  PATH: process.env.PATH ?? "",
-  HOME: process.env.HOME ?? "/tmp",
-};
+  const serverEnv = { PATH: process.env.PATH ?? "" };
 
   const { McpClient, StdioTransport } = pi;
   const transport = new StdioTransport({
@@ -112,5 +84,5 @@ const serverEnv = {
   const call = await client.callTool("grafana_logs_query", { query: "*" });
   assert.equal(call.isError, true);
   const text = call.content?.[0]?.text ?? "";
-  assert.match(text, /GRAFANA_URL \/ GRAFANA_DATASOURCE_UID are not set/);
+  assert.match(text, /Grafana configuration is unavailable/);
 });

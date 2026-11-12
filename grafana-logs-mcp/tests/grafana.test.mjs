@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
 import {
   buildQueryPayload,
   grafanaApiUrl,
@@ -39,6 +38,10 @@ test("formatSeverity maps levels to emoji", () => {
 test("formatTimestamp parses epoch ms", () => {
   assert.match(formatTimestamp("1760000000000"), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
   assert.equal(formatTimestamp("None"), "");
+  assert.equal(formatTimestamp("2026-11-11T12:34:56.789Z"), "2026-11-11 12:34:56");
+  assert.equal(formatTimestamp("2026-11-11T14:34:56+02:00"), "2026-11-11 12:34:56");
+  assert.equal(formatTimestamp("not-a-date"), "not-a-date");
+  assert.equal(formatTimestamp("1760000000000garbage"), "1760000000000garbage");
 });
 
 test("formatResults renders entries", () => {
@@ -74,59 +77,69 @@ test("grafanaApiUrl keeps raw requests on the configured API origin", () => {
   );
 });
 
-test("grafanaFetch refuses cross-origin redirects", async (t) => {
-  let targetRequests = 0;
-  const target = createServer((_req, res) => {
-    targetRequests++;
-    res.end("unexpected");
+test("grafanaFetch fixes redirect policy and preserves cancellation", async (t) => {
+  const controller = new AbortController();
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    assert.equal(options.redirect, "error");
+    controller.abort();
+    assert.equal(options.signal.aborted, true);
+    throw new TypeError("dummy fetch failure");
   });
-  await new Promise((resolve) => target.listen(0, "127.0.0.1", resolve));
-  t.after(async () => {
-    target.closeAllConnections?.();
-    await new Promise((resolve) => target.close(resolve));
-  });
-  const targetAddress = target.address();
-
-  const redirect = createServer((_req, res) => {
-    res.writeHead(307, { Location: `http://127.0.0.1:${targetAddress.port}/capture` });
-    res.end();
-  });
-  await new Promise((resolve) => redirect.listen(0, "127.0.0.1", resolve));
-  t.after(async () => {
-    redirect.closeAllConnections?.();
-    await new Promise((resolve) => redirect.close(resolve));
-  });
-  const redirectAddress = redirect.address();
-
   await assert.rejects(
-    grafanaFetch(`http://127.0.0.1:${redirectAddress.port}/api/test`, { method: "POST", body: "sensitive" }),
-    { name: "TypeError" },
+    grafanaFetch("https://grafana.example/api/test", { method: "POST" }, controller.signal),
+    /request failed/,
   );
-  assert.equal(targetRequests, 0);
 });
 
-test("grafanaFetch attaches the auth header only when configured", async (t) => {
-  let seen = {};
-  let requests = 0;
-  const server = createServer((req, res) => {
-    requests++;
-    seen = { authorization: req.headers.authorization };
-    res.end("ok");
+test("grafanaFetch attaches optional auth on HTTPS and preserves other headers", async (t) => {
+  const calls = [];
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    calls.push(new Headers(options.headers));
+    return new Response("ok");
   });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  t.after(async () => {
-    server.closeAllConnections?.();
-    await new Promise((resolve) => server.close(resolve));
+  await grafanaFetch("https://grafana.example/api/test", {
+    method: "POST", authHeader: "Bearer test-token", headers: { Accept: "application/json" },
   });
-  const url = `http://127.0.0.1:${server.address().port}/api/test`;
+  assert.equal(calls[0].get("Authorization"), "Bearer test-token");
+  assert.equal(calls[0].get("Accept"), "application/json");
+  await grafanaFetch("http://grafana.example/api/test");
+  assert.equal(calls[1].has("Authorization"), false);
+});
 
-  await grafanaFetch(url, { method: "POST", authHeader: "Bearer test-token" });
-  assert.equal(requests, 1);
-  assert.equal(seen.authorization, "Bearer test-token");
+test("grafanaFetch refuses credentials over HTTP before making any request", async (t) => {
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async () => { calls++; return new Response("unexpected"); });
+  for (const options of [
+    { authHeader: "Bearer dummy-secret" },
+    { headers: { authorization: "Bearer dummy-secret" } },
+  ]) {
+    await assert.rejects(grafanaFetch("http://grafana.example/api/test", options), /HTTPS/);
+  }
+  assert.equal(calls, 0);
+});
 
-  await grafanaFetch(url, { method: "POST" });
-  assert.equal(requests, 2);
-  assert.equal(seen.authorization, undefined);
+test("grafanaFetch never exposes a malformed credential or a fetch exception", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => { throw new Error("echoed dummy-secret"); });
+  for (const authHeader of ["Bearer dummy-secret", "Bearer dummy-secret\nwrapped"]) {
+    await assert.rejects(grafanaFetch("https://grafana.example/api/test", { authHeader }), (error) => {
+      assert.ok(!error.message.includes("dummy-secret"));
+      return true;
+    });
+  }
+});
+
+test("counts all successful frames and queries, matching the formatted header", () => {
+  const frame = (count) => ({ schema: { fields: [{ name: "body", type: "string" }] },
+    data: { values: [Array.from({ length: count }, (_,i) => `row-${i}`)] } });
+  const data = { results: {
+    A: { frames: [frame(2), frame(3)] },
+    B: { frames: [frame(1)] },
+    C: { status: 500, frames: [frame(8)] },
+  } };
+  assert.equal(countResults(data), 6);
+  assert.match(formatResults(data), /6 log entries/);
+  assert.equal(countResults({ results: {} }), 0);
+  assert.equal(countResults(null), 0);
 });
 
 test("buildQueryPayload shape", () => {
@@ -177,6 +190,18 @@ test("loadConfig trims the URL and defaults the datasource type", () => {
     GRAFANA_DATASOURCE_UID: "uid-1",
   });
   assert.equal(withoutToken.authHeader, undefined);
+  assert.equal(loadConfig({ GRAFANA_URL: "https://grafana.example", GRAFANA_DATASOURCE_UID: "example",
+    GRAFANA_API_TOKEN: "   " }).authHeader, undefined);
+  for (const token of ["dummy-secret\nwrapped", "dummy-secret\rwrapped", "dummy secret", "dummy\u0001secret"]) {
+    assert.throws(() => loadConfig({ GRAFANA_URL: "https://grafana.example", GRAFANA_DATASOURCE_UID: "example",
+      GRAFANA_API_TOKEN: token }), (error) => {
+      assert.match(error.message, /GRAFANA_API_TOKEN/);
+      assert.ok(!error.message.includes("dummy"));
+      return true;
+    });
+  }
+  assert.throws(() => loadConfig({ GRAFANA_URL: "http://grafana.example", GRAFANA_DATASOURCE_UID: "example",
+    GRAFANA_API_TOKEN: "dummy-secret" }), /HTTPS/);
 
   assert.throws(() => loadConfig({}), /GRAFANA_URL and GRAFANA_DATASOURCE_UID must be set/);
 });

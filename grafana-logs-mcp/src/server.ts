@@ -26,13 +26,13 @@ import {
   rawInputSchema,
   rawOutputSchema,
 } from "./contract.js";
-import { loadConfig, type GrafanaConfig } from "./config.js";
+import { DEFAULT_DATASOURCE_TYPE, loadConfig, type GrafanaConfig } from "./config.js";
 import { doctorReport } from "./doctor.js";
 import { countResults, extractRawFrameInfo, formatResults, tryFormatJson } from "./format.js";
-import { buildQueryPayload, grafanaApiUrl, grafanaFetch } from "./grafana.js";
+import { buildQueryPayload, grafanaApiUrl, grafanaFetch, requestErrorMessage } from "./grafana.js";
 
 const CONFIG_ERROR =
-  "❌ GRAFANA_URL / GRAFANA_DATASOURCE_UID are not set.";
+  "❌ Grafana configuration is unavailable. Check GRAFANA_URL / GRAFANA_DATASOURCE_UID and optional GRAFANA_API_TOKEN in the server diagnostics.";
 
 function log(message: string): void {
   process.stderr.write(`[grafana-logs] ${message}\n`);
@@ -98,7 +98,7 @@ async function runQuery(params: Record<string, unknown>, config: GrafanaConfig, 
     if (status === 401 || status === 403) {
       return errorResult(
         `❌ HTTP ${status} — not authorized. The Grafana API may require ` +
-          `authentication from outside the corporate network. Check VPN/network access.`,
+          `authentication. Check GRAFANA_API_TOKEN, its permissions and network/VPN access.`,
       );
     }
     if (status === 404) {
@@ -108,11 +108,10 @@ async function runQuery(params: Record<string, unknown>, config: GrafanaConfig, 
     }
     return errorResult(`❌ HTTP ${status}:\n${responseText.substring(0, 500)}`);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
     return errorResult(
-      `❌ Request failed: ${msg}\n\nCheck:\n` +
+      `❌ Request failed: ${requestErrorMessage(err)}\n\nCheck:\n` +
         `  1. Are you on the network/VPN that hosts Grafana?\n` +
-        `  2. Is the Grafana URL correct? (${config.url})\n  3. Try grafana_logs_raw GET /api/datasources`,
+        `  2. Is GRAFANA_URL correct?\n  3. Try grafana_logs_raw GET /api/datasources`,
     );
   }
 }
@@ -135,8 +134,7 @@ async function runRaw(params: Record<string, unknown>, config: GrafanaConfig, si
     const body = `HTTP ${response.status} ${response.statusText}\n\n${tryFormatJson(text).substring(0, 8000)}`;
     return withStructured(textResult(body), rawOutputSchema, { status: response.status });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return errorResult(`❌ Request failed: ${msg}`);
+    return errorResult(`❌ Request failed: ${requestErrorMessage(err)}`);
   }
 }
 
@@ -195,8 +193,8 @@ async function main(): Promise<void> {
     config = loadConfig();
   } catch (e) {
     // Stay up so tools/list works and the error explains what to configure.
-    log(String(e instanceof Error ? e.message : e));
-    config = { url: "", datasourceUid: "", datasourceType: "quickwit-quickwit-datasource", authHeader: undefined };
+    log(requestErrorMessage(e));
+    config = { url: "", datasourceUid: "", datasourceType: DEFAULT_DATASOURCE_TYPE, authHeader: undefined };
   }
 
   const handle = serveStdio(

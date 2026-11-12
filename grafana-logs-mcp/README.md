@@ -12,11 +12,11 @@ Two tools against a Grafana instance with a Quickwit datasource:
 
 `node dist/server.js --doctor` prints the environment readiness report
 (values are never printed) and exits non-zero while a required variable is
-missing; `./install.sh list` runs it for the requirements section.
+missing or invalid. `./install.sh list` runs it for the requirements section.
 
-Ported from the `agent-toolkit` catalogue at source revision `e985502`
-(2026-10-19) with no local diff; the transport boundary, clamps and error
-texts are preserved.
+Ported from the `agent-toolkit` catalogue at source revision `e985502`.
+The port adds bearer authentication and safe error messages. It also corrects
+ISO timestamps and counts rows across all successful frames.
 
 ## Tools
 
@@ -36,17 +36,18 @@ baked into the server); `requirements.json` owns the table:
 
 | Env | Meaning |
 | --- | --- |
-| `GRAFANA_URL` | exact canonical HTTPS base URL; redirects and embedded credentials are rejected, e.g. `https://grafana.your-company.net` |
+| `GRAFANA_URL` | canonical HTTP or HTTPS base URL. A token requires HTTPS. Redirects and embedded credentials are rejected. |
 | `GRAFANA_DATASOURCE_UID` | Quickwit datasource UID |
 | `GRAFANA_DATASOURCE_TYPE` | default `quickwit-quickwit-datasource` |
-| `GRAFANA_API_TOKEN` | optional; a Grafana service-account token or legacy API key — every request then carries `Authorization: Bearer …` |
+| `GRAFANA_API_TOKEN` | optional Grafana service-account token or legacy API key. Authenticated requests require HTTPS and use `Authorization: Bearer …`. |
 
-Authentication is optional: without `GRAFANA_API_TOKEN` requests are
-anonymous and the instance is reached through network-level access (VPN)
-only. When the token is set, `grafanaFetch` is the single place that
-attaches the header, and refused redirects mean it can never be replayed
-to another origin. The token is never printed — the doctor reports
-presence only.
+Without `GRAFANA_API_TOKEN`, requests are anonymous. Network access can require
+a VPN. With a token, the server requires HTTPS before any request. There is
+no insecure-authentication override.
+
+The server rejects malformed tokens without quoting their values. It also
+replaces transport exceptions with safe diagnostics. The doctor reports
+presence only. Redirects remain disabled.
 
 Without the required env the server still starts and answers `tools/list`;
 calls return a clear configuration error instead of guessing a target.

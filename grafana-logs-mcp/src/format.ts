@@ -32,20 +32,12 @@ function toResults(data: unknown): Record<string, QueryResult> | undefined {
 
 export function formatTimestamp(ts: string): string {
   if (!ts || ts === "None") return "";
-  try {
-    const ms = Number.parseInt(ts, 10);
-    if (!Number.isNaN(ms)) {
-      const d = new Date(ms);
-      if (!Number.isNaN(d.getTime())) {
-        return d.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "");
-      }
-    }
-    const d = new Date(ts);
-    if (!Number.isNaN(d.getTime())) {
-      return d.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "");
-    }
-  } catch {
-    // fall through to the raw string
+  const value = ts.trim();
+  // Parse a number only when the whole value is numeric: parseInt also
+  // accepts the year prefix of an ISO date and turns it into epoch millis.
+  const date = /^[+-]?\d+(?:\.\d+)?$/.test(value) ? new Date(Number(value)) : new Date(value);
+  if (!Number.isNaN(date.getTime())) {
+    return date.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "");
   }
   return ts;
 }
@@ -79,6 +71,19 @@ const METADATA_FIELDS = new Set([
   "pod_labels.apps",
 ]);
 
+function failedQuery(result: QueryResult): boolean {
+  return (result.status ?? 0) >= 400;
+}
+
+/** First-column length defines the row count for a Grafana frame. */
+function firstColumn(frame: QueryFrame): unknown[] {
+  const values = frame.data?.values ?? [];
+  if (values.length === 0) return [];
+  const first = values[0];
+  if (!Array.isArray(first)) throw new Error("malformed frame: first column is not an array");
+  return first;
+}
+
 /** Format a Grafana /api/ds/query response into readable log lines. */
 export function formatResults(data: unknown): string {
   try {
@@ -89,7 +94,7 @@ export function formatResults(data: unknown): string {
     let totalCount = 0;
 
     for (const [refId, result] of Object.entries(results)) {
-      if (result.status && result.status >= 400) {
+      if (failedQuery(result)) {
         lines.push(`⚠️ Query ${refId} returned status ${result.status}`);
         continue;
       }
@@ -100,14 +105,7 @@ export function formatResults(data: unknown): string {
       for (const frame of frames) {
         const fields = frame.schema?.fields ?? [];
         const values = frame.data?.values ?? [];
-        const first = values[0];
-        if (values.length === 0) continue;
-        if (!Array.isArray(first)) {
-          // The source crashed here (non-null assertion on a null column) and
-          // surfaced the parse-error path; keep that signal instead of
-          // silently answering "no results" for a malformed frame.
-          throw new Error("malformed frame: first column is not an array");
-        }
+        const first = firstColumn(frame);
         if (first.length === 0) continue;
 
         const rowCount = first.length;
@@ -179,15 +177,12 @@ export function countResults(data: unknown): number {
   try {
     const results = toResults(data);
     if (!results) return 0;
+    let count = 0;
     for (const result of Object.values(results)) {
-      for (const frame of result.frames ?? []) {
-        const values = frame.data?.values;
-        const first = values?.[0];
-        if (values && values.length > 0 && first) {
-          return first.length;
-        }
-      }
+      if (failedQuery(result)) continue;
+      for (const frame of result.frames ?? []) count += firstColumn(frame).length;
     }
+    return count;
   } catch {
     // a malformed response counts as zero rows
   }

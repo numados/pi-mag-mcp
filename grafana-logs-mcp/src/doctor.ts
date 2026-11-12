@@ -1,9 +1,10 @@
-/**
- * grafana-logs-mcp readiness report. One owner of the doctor verdict: the
- * installer's `list` runs `node dist/server.js --doctor` and prints this
- * text; exit code 1 means a required environment value is missing.
- * Values are never printed — only their presence.
- */
+/** Environment readiness; no network calls and no configuration values in the report. */
+import { readFileSync } from "node:fs";
+import { GrafanaConfigurationError, loadConfig } from "./config.js";
+
+const requirements = JSON.parse(readFileSync(new URL("../requirements.json", import.meta.url), "utf8")) as {
+  env: Array<{ name: string; required: boolean }>;
+};
 
 export interface DoctorReport {
   text: string;
@@ -11,18 +12,19 @@ export interface DoctorReport {
 }
 
 export function doctorReport(env: NodeJS.ProcessEnv = process.env): DoctorReport {
-  const url = env.GRAFANA_URL;
-  const uid = env.GRAFANA_DATASOURCE_UID;
   const lines = [
     "grafana-logs status",
-    `  GRAFANA_URL: ${url ? "set" : "missing"}`,
-    `  GRAFANA_DATASOURCE_UID: ${uid ? "set" : "missing"}`,
-    `  GRAFANA_DATASOURCE_TYPE: ${env.GRAFANA_DATASOURCE_TYPE ?? "quickwit-quickwit-datasource (default)"}`,
-    `  GRAFANA_API_TOKEN: ${env.GRAFANA_API_TOKEN ? "set" : "missing (optional — anonymous requests)"}`,
+    ...requirements.env.map(({ name, required }) => {
+      const present = Boolean(env[name]?.trim());
+      return `  ${name}: ${present ? "set" : required ? "missing" : "missing (optional)"}`;
+    }),
   ];
-  const ok = Boolean(url && uid);
-  if (!ok) {
-    lines.push("  calls will answer a configuration error until both required values are set");
+  let ok = true;
+  try {
+    loadConfig(env);
+  } catch (error) {
+    ok = false;
+    lines.push(`  configuration: ${error instanceof GrafanaConfigurationError ? error.message : "Invalid Grafana configuration"}`);
   }
   return { text: lines.join("\n") + "\n", ok };
 }
