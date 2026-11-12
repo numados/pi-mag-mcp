@@ -49,6 +49,8 @@ entry into Pi's configuration:
 `~/.config/devwork-mcp/installations/`, and never touches the user-level file.
 See `devwork-mcp/README.md` for the four-layer model, scope enforcement and the
 preview binding on writes.
+Local registration owns `DEVWORK_INSTALLATION` and `DEVWORK_INSTALLATIONS_DIR`.
+It removes stale file selectors and rejects profile-path overrides through `--env`.
 
 A server name is required. Without one the script prints usage and exits 2, so
 a bare invocation cannot install whatever happens to be in the repository.

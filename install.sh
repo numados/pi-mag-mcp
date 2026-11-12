@@ -276,7 +276,40 @@ build_tool_exposure_json() { # build_tool_exposure_json <csv>
           if $at == null then . else .[$pair[0:$at]] = $pair[$at + 1:] end)'
 }
 
+validate_exposure() {
+  [ -n "$EXPOSURE" ] || EXPOSURE="codemode"
+  case "$EXPOSURE" in
+    codemode|deferred|direct|hidden) ;;
+    *) die "--exposure must be codemode, deferred, direct or hidden" ;;
+  esac
+}
+
+registration_filter() {
+  cat <<'EOF'
+.mcpServers //= {} |
+.mcpServers[$n] = (
+  ((.mcpServers[$n] // {}) + {
+    command: $cmd,
+    args: [$path],
+    description: $desc,
+    exposure: $exposure
+  })
+  | if ($cwd != "") then .cwd = $cwd else . end
+  | if ($timeout != "" and (.timeout == null)) then .timeout = ($timeout | tonumber) else . end
+  | if $env == null then . else .env = ((.env // {}) + $env) end
+  | if $installation == "" then . else
+      .env = (((.env // {}) | del(.DEVWORK_INSTALLATION_FILE)) + {
+        DEVWORK_INSTALLATION: $installation,
+        DEVWORK_INSTALLATIONS_DIR: $installationDir
+      })
+    end
+  | if $toolExposure == null then . else .toolExposure = ((.toolExposure // {}) + $toolExposure) end
+)
+EOF
+}
+
 cmd_install() {
+  validate_exposure
   if [ "$LOCAL" = true ]; then cmd_install_local; return 0; fi
   require_known_server
   # devwork serves one installation per repository. A user-level entry would
@@ -295,8 +328,6 @@ cmd_install() {
   node_bin="$(command -v node || true)"
 
   [ -f "$package" ] || die "missing $package"
-  [ -n "$EXPOSURE" ] || EXPOSURE="codemode"
-  case "$EXPOSURE" in codemode|deferred|direct|hidden) ;; *) die "--exposure must be codemode, deferred, direct or hidden" ;; esac
 
   step "plan"
   note "server: $TARGET ($dir)"
@@ -354,15 +385,32 @@ cmd_install() {
 # devwork serves one installation per repository: the profile carries endpoints,
 # scope and write policy, the repository only selects it. This mode therefore
 # writes <repo>/.pi/mcp.json and never touches the user-level file.
+validate_local_env() {
+  local pair key value
+  for pair in "${ENV_PAIRS[@]}"; do
+    key="${pair%%=*}"
+    value="${pair#*=}"
+    case "$key" in
+      DEVWORK_INSTALLATION_FILE|DEVWORK_INSTALLATIONS_DIR)
+        die "--env $key cannot override the local installation profile" ;;
+      DEVWORK_INSTALLATION)
+        [ "$value" = "$INSTALLATION" ] || die "--env DEVWORK_INSTALLATION cannot override --installation '$INSTALLATION'" ;;
+    esac
+  done
+}
+
 cmd_install_local() {
   [ "$TARGET" = "devwork" ] || die "--local is supported for devwork only (it is the installation-scoped server)"
   [ -n "$REPO_PATH" ] || die "--local needs --repo <repository root>"
   [ -n "$INSTALLATION" ] || die "--local needs --installation <id> (the profile name for this repository)"
+  validate_local_env
 
-  local repo dir desc entry_path profile_dir profile node_bin
+  local repo dir desc timeout tool_expose entry_path profile_dir profile node_bin
   repo="$(cd "$REPO_PATH" 2>/dev/null && pwd -P)" || die "no such directory: $REPO_PATH"
   dir="$(server_field devwork 2)" || die "devwork is missing from the registry"
   desc="$(server_field devwork 3)"
+  timeout="$(server_field devwork 4)"
+  tool_expose="$(server_field devwork 5)"
   entry_path="$ROOT/$dir/dist/server.js"
   profile_dir="${XDG_CONFIG_HOME:-$HOME/.config}/devwork-mcp/installations"
   profile="$profile_dir/$INSTALLATION.json"
@@ -374,13 +422,20 @@ cmd_install_local() {
   note "entry:        $entry_path"
   note "profile:      $profile (mode 600, excluded from the repository)"
   note "project file: $repo/.pi/mcp.json (a full entry; the user-level mcp.json is not touched)"
+  note "exposure:    $EXPOSURE"
+  [ -n "$tool_expose" ] && note "tool exposure: $tool_expose (merged, other tools untouched)"
+  [ "${#ENV_PAIRS[@]}" -gt 0 ] && note "env:         $(printf '%s\n' "${ENV_PAIRS[@]}" | cut -d= -f1 | paste -sd ',' -) (values not shown)"
   note "environment:  DEVWORK_INSTALLATION=$INSTALLATION"
 
   if [ "$DRY_RUN" = true ]; then
     step "dry run — nothing is built, tested or written"
     [ "$SKIP_BUILD" = true ] && note "would reuse $entry_path (--skip-build)" || note "would run: npm ci && npm run build && npm test in $dir"
-    [ -f "$profile" ] && note "profile exists, would be left untouched" || note "would create the profile from installation.example.json"
-    note "would merge the devwork entry into $repo/.pi/mcp.json (backup first)"
+    if [ "$REGISTER" = true ]; then
+      [ -f "$profile" ] && note "profile exists, would be left untouched" || note "would create the profile from installation.example.json"
+      note "would merge the devwork entry into $repo/.pi/mcp.json (backup first)"
+    else
+      note "would skip registration (--no-pi): no installation profile or project registration"
+    fi
     return 0
   fi
 
@@ -395,6 +450,13 @@ cmd_install_local() {
     ( cd "$ROOT/$dir" && npm test )
   fi
   [ -f "$entry_path" ] || die "missing $entry_path — build it first or drop --skip-build"
+
+  if [ "$REGISTER" != true ]; then
+    step "done"
+    note "registration skipped (--no-pi); no profile or project registration was written"
+    return 0
+  fi
+
   command -v jq >/dev/null 2>&1 || die "jq is required to write the profile and the registration safely (brew install jq)"
 
   step "installation profile"
@@ -429,20 +491,16 @@ cmd_install_local() {
   cp -p "$target" "$backup"
   note "backup: $backup"
 
+  local env_json tool_exposure_json
+  env_json="$(build_env_json)"
+  tool_exposure_json="$(build_tool_exposure_json "$tool_expose")"
+
   tmp="$(mktemp "$repo/.pi/.mcp.json.tmp.XXXXXX")"
-  if ! jq --arg cmd "$node_bin" --arg path "$entry_path" --arg id "$INSTALLATION" --arg desc "$desc" '
-        .mcpServers //= {} |
-        .mcpServers["devwork"] = {
-          command: $cmd,
-          args: [$path],
-          cwd: ".",
-          env: { DEVWORK_INSTALLATION: $id },
-          description: $desc,
-          exposure: "codemode",
-          timeout: 120,
-          toolExposure: { devwork_status: "direct", devwork_get: "direct", devwork_query: "direct" }
-        }
-      ' "$target" >"$tmp"; then
+  if ! jq --arg n "devwork" --arg cmd "$node_bin" --arg path "$entry_path" \
+          --arg desc "$desc" --arg exposure "$EXPOSURE" --arg timeout "$timeout" \
+          --arg cwd "." --arg installation "$INSTALLATION" --arg installationDir "$profile_dir" \
+          --argjson env "$env_json" --argjson toolExposure "$tool_exposure_json" \
+          "$(registration_filter)" "$target" >"$tmp"; then
     rm -f "$tmp"
     die "could not merge the entry; $target is unchanged"
   fi
@@ -486,20 +544,9 @@ register() { # register <name> <description> <node-bin> <entry-path> <timeout> <
   tmp="$(mktemp "$dir/.mcp.json.tmp.XXXXXX")"
   if ! jq --arg n "$name" --arg cmd "$node_bin" --arg path "$entry_path" \
           --arg desc "$desc" --arg exposure "$EXPOSURE" --arg timeout "$timeout" \
-          --argjson env "$env_json" --argjson toolExposure "$tool_exposure_json" '
-        .mcpServers //= {} |
-        .mcpServers[$n] = (
-          ((.mcpServers[$n] // {}) + {
-            command: $cmd,
-            args: [$path],
-            description: $desc,
-            exposure: $exposure
-          })
-          | if ($timeout != "" and (.timeout == null)) then .timeout = ($timeout | tonumber) else . end
-          | if $env == null then . else .env = ((.env // {}) + $env) end
-          | if $toolExposure == null then . else .toolExposure = ((.toolExposure // {}) + $toolExposure) end
-        )
-      ' "$MCP_JSON" >"$tmp"; then
+          --arg cwd "" --arg installation "" --arg installationDir "" \
+          --argjson env "$env_json" --argjson toolExposure "$tool_exposure_json" \
+          "$(registration_filter)" "$MCP_JSON" >"$tmp"; then
     rm -f "$tmp"
     die "could not merge the entry; $MCP_JSON is unchanged"
   fi
